@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Video, PomodoroSettings, PlaylistData, PomodoroStats } from '../types';
 import { BreakActivity, defaultBreakActivities } from '../data/breakActivities';
+import { newPlaylists } from '../data/playlists';
 
 interface FocusGoal {
   mainGoal: string;
@@ -48,6 +49,7 @@ interface StoreState {
   clearAllData: () => void;
   setFocusGoal: (goal: FocusGoal) => void;
   toggleFocusGoalModal: (isOpen: boolean) => void;
+  resetPomodoro: () => void;
 
   // Data Management Actions
   exportData: () => void;
@@ -276,10 +278,29 @@ export const useStore = create<StoreState>()(
         if (timer) {
           clearInterval(timer);
         }
+      
+        const defaultPlaylists = newPlaylists.reduce((acc: Record<string, PlaylistData>, playlist) => {
+          acc[playlist.name] = {
+            ...DEFAULT_PLAYLIST_DATA,
+            ...playlist,
+            videos: [], // Videos should be fetched separately
+          };
+          return acc;
+        }, {} as Record<string, PlaylistData>);
+      
+        const currentWorkPlaylist = get().workPlaylist;
+        const currentBreakPlaylist = get().breakPlaylist;
+      
+        const newWorkPlaylist = currentWorkPlaylist.name ? defaultPlaylists[currentWorkPlaylist.name] || DEFAULT_PLAYLIST_DATA : DEFAULT_PLAYLIST_DATA;
+        const newBreakPlaylist = currentBreakPlaylist.name ? defaultPlaylists[currentBreakPlaylist.name] || DEFAULT_PLAYLIST_DATA : DEFAULT_PLAYLIST_DATA;
+      
         set({
           ...DEFAULT_STATE,
           pomodoroSettings,
-          breakActivities: defaultBreakActivities
+          breakActivities: defaultBreakActivities,
+          workPlaylist: newWorkPlaylist,
+          breakPlaylist: newBreakPlaylist,
+          playlist: newWorkPlaylist,
         });
       },
       
@@ -289,6 +310,21 @@ export const useStore = create<StoreState>()(
 
       toggleFocusGoalModal: (isOpen) => {
         set({ isFocusGoalModalOpen: isOpen });
+      },
+
+      resetPomodoro: () => {
+        const { timer, pomodoroSettings } = get();
+        if (timer) {
+          clearInterval(timer);
+        }
+        get().setIsPlaying(false);
+        set({
+          isRunning: false,
+          currentSession: 'work',
+          timeRemaining: pomodoroSettings.workDuration,
+          timer: null,
+          focusGoal: { mainGoal: '', howToAchieve: '' },
+        });
       },
 
       exportData: () => {

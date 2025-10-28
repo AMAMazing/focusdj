@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, CheckCircle, Trash2, Edit } from 'lucide-react';
+import { Play, Pause, RotateCcw, CheckCircle, Edit, RefreshCw } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const PRESET_DURATIONS = [
@@ -28,7 +28,7 @@ export const PomodoroTimer: React.FC = () => {
     pauseTimer,
     resetTimer,
     updateSettings,
-    clearAllData,
+    resetPomodoro,
     toggleFocusGoalModal,
   } = useStore();
 
@@ -73,11 +73,11 @@ export const PomodoroTimer: React.FC = () => {
           {isWorkSession ? 'Focus Timer' : 'Break Time'}
         </h2>
         <button
-          onClick={clearAllData}
-          className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-          title="Clear all data"
+          onClick={resetPomodoro}
+          className="p-2 text-gray-400 hover:text-white transition-colors"
+          title="Reset Pomodoro"
         >
-          <Trash2 size={20} />
+          <RefreshCw size={20} />
         </button>
       </div>
 

@@ -266,9 +266,6 @@ function App() {
             </ErrorBoundary>
           </div>
         </div>
-        <div className="text-center text-xs text-gray-500 mt-8">
-          <p>For the best experience, please keep this tab active. Autoplay may not work in the background.</p>
-        </div>
       </main>
       <Footer />
     </div>

@@ -7,7 +7,7 @@ interface PlaylistProgressProps {
 }
 
 export const PlaylistProgress: React.FC<PlaylistProgressProps> = ({ videos, currentIndex }) => {
-  const completedCount = videos.filter(v => v.completed).length;
+  const completedCount = currentIndex;
   const progress = (completedCount / videos.length) * 100;
 
   return (
