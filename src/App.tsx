@@ -408,8 +408,8 @@ const mainContent = (
     <>
         {error && <div className="mb-4 p-4 bg-red-950/50 border border-red-900 rounded-xl text-red-400">{error}</div>}
         <div className="grid md:grid-cols-2 gap-4 md:gap-8">
-            <div className="space-y-4 md:space-y-8">
-                <div className="bg-zinc-900 rounded-2xl p-8">
+            <div className="flex flex-col space-y-4 md:space-y-8">
+                <div className="bg-zinc-900 rounded-2xl p-8 flex-grow">
                     <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">{currentSession === 'work' ? 'Focus Timer' : 'Break Time'}</h2><button onClick={store.resetPomodoro} className="p-2 text-zinc-500 hover:text-white"><RefreshCw size={18} /></button></div>
                     {currentSession === 'work' && focusGoal.mainGoal && <div className="bg-zinc-800 p-4 rounded-lg mb-6"><div className="flex justify-between items-start gap-2"><div><h3 className="font-bold text-lg">{focusGoal.mainGoal}</h3>{focusGoal.howToAchieve && <p className="text-sm text-zinc-400 mt-1">{focusGoal.howToAchieve}</p>}</div><button onClick={() => store.toggleFocusGoalModal(true)} className="p-1.5 text-zinc-500 hover:text-white"><Edit size={14} /></button></div></div>}
                     <div className="flex items-center justify-center gap-2 text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] mb-6 smooth-color-transition"><CheckCircle size={16} /><span className="text-sm">{pomodoroStats.totalMinutesToday} min today</span></div>
