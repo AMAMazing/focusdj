@@ -6,7 +6,7 @@ export interface Video {
 }
 
 export interface PlaylistData {
-  name?: string;
+  name: string | null;
   videos: Video[];
   currentIndex: number;
   isPlaying: boolean;

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Video, PomodoroSettings, PlaylistData, PomodoroStats } from '../types';
 import { BreakActivity, defaultBreakActivities } from '../data/breakActivities';
 import { newPlaylists } from '../data/playlists';
+import { fetchPlaylistVideos } from '../utils/youtube';
 
 interface FocusGoal {
   mainGoal: string;
@@ -12,6 +13,17 @@ interface FocusGoal {
 interface UserProfile {
     name: string;
     picture: string;
+}
+
+interface PendingPlaylist {
+  name: string | null;
+  url: string | null;
+}
+
+export interface CustomPlaylist {
+    id: string;
+    name: string;
+    url: string;
 }
 
 interface StoreState {
@@ -37,6 +49,9 @@ interface StoreState {
   playlist: PlaylistData;
   workPlaylist: PlaylistData;
   breakPlaylist: PlaylistData;
+  pendingPlaylist: PendingPlaylist;
+  customPlaylists: CustomPlaylist[];
+  globalVolume: number;
   
   // Actions
   login: (response: any) => void;
@@ -44,6 +59,7 @@ interface StoreState {
   startTimer: () => void;
   pauseTimer: () => void;
   resetTimer: () => void;
+  skipSession: () => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
   updatePomodoroStats: (minutes: number) => void;
   clearAllData: () => void;
@@ -64,12 +80,16 @@ interface StoreState {
   // Playlist Actions
   setPlaylist: (playlist: PlaylistData) => void;
   setBreakPlaylist: (playlist: PlaylistData) => void;
+  setPendingPlaylist: (playlist: PendingPlaylist) => void;
   setCurrentVideo: (index: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setVolume: (volume: number) => void;
   setAudioOnly: (audioOnly: boolean) => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+  addCustomPlaylist: (playlist: Omit<CustomPlaylist, 'id'>) => void;
+  updateCustomPlaylist: (playlist: CustomPlaylist) => void;
+  deleteCustomPlaylist: (id: string) => void;
 }
 
 const DEFAULT_SETTINGS: PomodoroSettings = {
@@ -79,7 +99,8 @@ const DEFAULT_SETTINGS: PomodoroSettings = {
   longBreakInterval: 4,
 };
 
-const DEFAULT_PLAYLIST_DATA: PlaylistData = {
+export const DEFAULT_PLAYLIST_DATA: PlaylistData = {
+  name: null,
   videos: [],
   currentIndex: 0,
   isPlaying: false,
@@ -105,12 +126,15 @@ const DEFAULT_STATE = {
   playlist: DEFAULT_PLAYLIST_DATA,
   workPlaylist: DEFAULT_PLAYLIST_DATA,
   breakPlaylist: DEFAULT_PLAYLIST_DATA,
+  pendingPlaylist: { name: null, url: null },
   focusGoal: {
     mainGoal: '',
     howToAchieve: '',
   },
   isFocusGoalModalOpen: false,
   breakActivities: defaultBreakActivities,
+  customPlaylists: [],
+  globalVolume: 70,
 };
 
 // Fisher-Yates shuffle algorithm
@@ -148,68 +172,25 @@ export const useStore = create<StoreState>()(
       },
 
       startTimer: () => {
-        const state = get();
-        if (state.isRunning && state.timer) return;
+        if (get().isRunning) return; // Guard clause: Don't start if already running.
 
-        if (state.timer) {
-          clearInterval(state.timer);
-        }
-
-        if (state.playlist.videos.length > 0) {
+        if (get().playlist.videos.length > 0) {
           get().setIsPlaying(true);
         }
         
-        const timer = setInterval(() => {
-          const currentState = get();
-          
-          if (currentState.timeRemaining <= 0) {
-            clearInterval(timer);
-
-            if (currentState.currentSession === 'work') {
-              const completedMinutes = Math.floor(currentState.pomodoroSettings.workDuration / 60);
-              set((state) => ({
-                pomodoroStats: {
-                  ...state.pomodoroStats,
-                  totalMinutesToday: state.pomodoroStats.totalMinutesToday + completedMinutes,
-                  sessionsCompleted: state.pomodoroStats.sessionsCompleted + 1,
-                },
-                focusGoal: { mainGoal: '', howToAchieve: '' }, // Reset goal for next session
-                workPlaylist: state.playlist, // Save work playlist
-                playlist: state.breakPlaylist.videos.length > 0 ? state.breakPlaylist : DEFAULT_PLAYLIST_DATA,
-              }));
-              get().setIsPlaying(currentState.breakPlaylist.videos.length > 0);
-              
-              const nextDuration = (currentState.pomodoroStats.sessionsCompleted + 1) % currentState.pomodoroSettings.longBreakInterval === 0
-                ? currentState.pomodoroSettings.longBreakDuration
-                : currentState.pomodoroSettings.breakDuration;
-              
-              set({
-                currentSession: 'break',
-                timeRemaining: nextDuration,
-                isRunning: false,
-              });
-              get().startTimer();
-
-            } else { // Break session has ended
-              set((state) => ({
-                currentSession: 'work',
-                timeRemaining: state.pomodoroSettings.workDuration,
-                isRunning: false,
-                playlist: state.workPlaylist.videos.length > 0 ? state.workPlaylist : state.playlist,
-              }));
+        const timerId = setInterval(() => {
+          set(state => {
+            if (state.timeRemaining > 1) {
+              return { timeRemaining: state.timeRemaining - 1 };
             }
-            return;
-          }
-          
-          set((state) => ({
-            timeRemaining: state.timeRemaining - 1,
-          }));
+            // Timer has reached its end.
+            get().skipSession(); 
+            // skipSession will clear this interval, so we just return the final state.
+            return { timeRemaining: 0 };
+          });
         }, 1000);
         
-        set({
-          isRunning: true,
-          timer,
-        });
+        set({ isRunning: true, timer: timerId });
       },
       
       pauseTimer: () => {
@@ -218,90 +199,110 @@ export const useStore = create<StoreState>()(
           clearInterval(timer);
         }
         get().setIsPlaying(false);
-        set({
-          isRunning: false,
-          timer: null,
-        });
+        set({ isRunning: false, timer: null }); // Set timer to null to indicate it's cleared.
       },
       
       resetTimer: () => {
-        const { timer, pomodoroSettings, currentSession } = get();
-        if (timer) {
-          clearInterval(timer);
-        }
+        get().pauseTimer(); // Use pauseTimer to correctly clear interval and state.
+        const { pomodoroSettings, currentSession } = get();
         
         const duration = currentSession === 'work' 
           ? pomodoroSettings.workDuration 
           : pomodoroSettings.breakDuration;
         
-        get().setIsPlaying(false);
-        set({
-          isRunning: false,
-          timeRemaining: duration,
-          timer: null,
-        });
+        set({ timeRemaining: duration });
+      },
+
+      skipSession: () => {
+        get().pauseTimer(); // Safely stop the current timer before proceeding.
+
+        const currentState = get();
+
+        if (currentState.currentSession === 'work') {
+          const completedSeconds = currentState.pomodoroSettings.workDuration - currentState.timeRemaining;
+          const completedMinutes = Math.round(completedSeconds / 60);
+          const newSessionsCompleted = currentState.pomodoroStats.sessionsCompleted + 1;
+
+          set((state) => ({
+            pomodoroStats: {
+              totalMinutesToday: state.pomodoroStats.totalMinutesToday + completedMinutes,
+              sessionsCompleted: newSessionsCompleted,
+            },
+            focusGoal: { mainGoal: '', howToAchieve: '' },
+            workPlaylist: state.playlist,
+            playlist: state.breakPlaylist.videos.length > 0 ? state.breakPlaylist : DEFAULT_PLAYLIST_DATA,
+          }));
+          
+          const nextDuration = (newSessionsCompleted % currentState.pomodoroSettings.longBreakInterval === 0)
+            ? currentState.pomodoroSettings.longBreakDuration
+            : currentState.pomodoroSettings.breakDuration;
+          
+          set({
+            currentSession: 'break',
+            timeRemaining: nextDuration,
+          });
+          get().startTimer();
+
+        } else { // Break session has ended
+          (async () => {
+            const { pendingPlaylist, workPlaylist } = get();
+            let nextWorkPlaylist = workPlaylist.videos.length > 0 ? workPlaylist : DEFAULT_PLAYLIST_DATA;
+
+            if (pendingPlaylist.url && pendingPlaylist.url !== workPlaylist.name) { // Also check if it's a new playlist
+              try {
+                const videos = await fetchPlaylistVideos(pendingPlaylist.url);
+                const randomIndex = Math.floor(Math.random() * videos.length);
+                nextWorkPlaylist = {
+                  ...DEFAULT_PLAYLIST_DATA,
+                  name: pendingPlaylist.name,
+                  videos,
+                  currentIndex: randomIndex,
+                  shuffle: true,
+                };
+              } catch (error) {
+                console.error("Failed to fetch pending playlist", error);
+              }
+            } else if (pendingPlaylist.name === 'None') {
+                nextWorkPlaylist = DEFAULT_PLAYLIST_DATA;
+            }
+            
+            set((state) => ({
+              playlist: nextWorkPlaylist,
+              workPlaylist: nextWorkPlaylist,
+              currentSession: 'work',
+              timeRemaining: state.pomodoroSettings.workDuration,
+            }));
+            
+            get().startTimer();
+          })();
+        }
       },
       
       updateSettings: (settings) => {
-        const { timer, currentSession } = get();
-        if (timer) {
-          clearInterval(timer);
-        }
+        get().pauseTimer();
         
-        get().setIsPlaying(false);
         set((state) => {
           const newSettings = { ...state.pomodoroSettings, ...settings };
-          const newTimeRemaining = currentSession === 'work' 
+          const newTimeRemaining = state.currentSession === 'work' 
             ? newSettings.workDuration 
             : newSettings.breakDuration;
             
           return {
             pomodoroSettings: newSettings,
             timeRemaining: newTimeRemaining,
-            isRunning: false,
-            timer: null,
           };
         });
       },
       
       updatePomodoroStats: (minutes) => {
         set((state) => ({
-          pomodoroStats: {
-            ...state.pomodoroStats,
-            totalMinutesToday: state.pomodoroStats.totalMinutesToday + minutes,
-          },
+          pomodoroStats: { ...state.pomodoroStats, totalMinutesToday: state.pomodoroStats.totalMinutesToday + minutes },
         }));
       },
 
       clearAllData: () => {
-        const { timer, pomodoroSettings } = get();
-        if (timer) {
-          clearInterval(timer);
-        }
-      
-        const defaultPlaylists = newPlaylists.reduce((acc: Record<string, PlaylistData>, playlist) => {
-          acc[playlist.name] = {
-            ...DEFAULT_PLAYLIST_DATA,
-            ...playlist,
-            videos: [], // Videos should be fetched separately
-          };
-          return acc;
-        }, {} as Record<string, PlaylistData>);
-      
-        const currentWorkPlaylist = get().workPlaylist;
-        const currentBreakPlaylist = get().breakPlaylist;
-      
-        const newWorkPlaylist = currentWorkPlaylist.name ? defaultPlaylists[currentWorkPlaylist.name] || DEFAULT_PLAYLIST_DATA : DEFAULT_PLAYLIST_DATA;
-        const newBreakPlaylist = currentBreakPlaylist.name ? defaultPlaylists[currentBreakPlaylist.name] || DEFAULT_PLAYLIST_DATA : DEFAULT_PLAYLIST_DATA;
-      
-        set({
-          ...DEFAULT_STATE,
-          pomodoroSettings,
-          breakActivities: defaultBreakActivities,
-          workPlaylist: newWorkPlaylist,
-          breakPlaylist: newBreakPlaylist,
-          playlist: newWorkPlaylist,
-        });
+        get().pauseTimer();
+        set(DEFAULT_STATE);
       },
       
       setFocusGoal: (goal) => {
@@ -313,27 +314,18 @@ export const useStore = create<StoreState>()(
       },
 
       resetPomodoro: () => {
-        const { timer, pomodoroSettings } = get();
-        if (timer) {
-          clearInterval(timer);
-        }
-        get().setIsPlaying(false);
+        get().pauseTimer();
         set({
-          isRunning: false,
-          currentSession: 'work',
-          timeRemaining: pomodoroSettings.workDuration,
-          timer: null,
-          focusGoal: { mainGoal: '', howToAchieve: '' },
+          ...DEFAULT_STATE,
+          pomodoroSettings: get().pomodoroSettings,
         });
       },
 
       exportData: () => {
         const state = get();
-        const dataStr = JSON.stringify(state);
+        const dataStr = JSON.stringify({ ...state, timer: null });
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        
         const exportFileDefaultName = 'focus-dj-backup.json';
-        
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', exportFileDefaultName);
@@ -343,11 +335,10 @@ export const useStore = create<StoreState>()(
       importData: (jsonData) => {
         try {
           const importedState = JSON.parse(jsonData);
-          // You might want to add validation here to ensure the imported data has the correct structure
-          set(importedState);
+          get().pauseTimer();
+          set({ ...importedState, isRunning: false, timer: null });
         } catch (error) {
           console.error("Failed to parse or apply imported data", error);
-          // Optionally, show an error to the user
         }
       },
 
@@ -373,121 +364,89 @@ export const useStore = create<StoreState>()(
       
       // Playlist Actions
       setPlaylist: (playlist) => {
-        const { currentSession } = get();
-        if (currentSession === 'work') {
-          set({ playlist, workPlaylist: playlist });
-        } else {
-          set({ playlist, breakPlaylist: playlist });
-        }
+        set({ 
+          playlist: { ...playlist, isPlaying: get().isRunning && playlist.videos.length > 0 }, 
+          workPlaylist: playlist 
+        });
       },
 
       setBreakPlaylist: (playlist) => set({ breakPlaylist: playlist }),
+
+      setPendingPlaylist: (playlist) => set({ pendingPlaylist: playlist }),
       
       setCurrentVideo: (index) => {
-        const state = get();
-        const { videos, shuffle } = state.playlist;
-        
-        if (shuffle) {
-          const shuffledVideos = shuffleArray(videos);
-          set({
-            playlist: {
-              ...state.playlist,
-              videos: shuffledVideos,
-              currentIndex: 0,
-            },
-          });
-        } else {
-          set({
-            playlist: {
-              ...state.playlist,
-              currentIndex: index,
-            },
-          });
-        }
+        set((state) => {
+          const { videos, repeat, shuffle } = state.playlist;
+          let newIndex = index;
+
+          if (shuffle && index > state.playlist.currentIndex) {
+            let randomIndex = Math.floor(Math.random() * videos.length);
+            if(videos.length > 1) {
+              while(randomIndex === state.playlist.currentIndex) {
+                randomIndex = Math.floor(Math.random() * videos.length);
+              }
+            }
+            newIndex = randomIndex;
+          } else {
+            if (repeat) {
+                newIndex = (index + videos.length) % videos.length;
+            } else {
+                newIndex = Math.max(0, Math.min(videos.length - 1, index));
+            }
+          }
+
+          return {
+            playlist: { ...state.playlist, currentIndex: newIndex },
+          };
+        });
       },
       
       setIsPlaying: (isPlaying) => {
-        set((state) => ({
-          playlist: {
-            ...state.playlist,
-            isPlaying,
-          },
-        }));
+        set((state) => ({ playlist: { ...state.playlist, isPlaying } }));
       },
       
       setVolume: (volume) => {
-        set((state) => ({
-          playlist: {
-            ...state.playlist,
-            volume,
-          },
-        }));
+        set({ globalVolume: volume });
       },
 
       setAudioOnly: (audioOnly) => {
-        set((state) => ({
-          playlist: {
-            ...state.playlist,
-            audioOnly,
-          },
-        }));
+        set((state) => ({ playlist: { ...state.playlist, audioOnly } }));
       },
 
       toggleShuffle: () => {
-        const state = get();
-        const { videos, shuffle } = state.playlist;
-        
-        if (!shuffle) {
-          const shuffledVideos = shuffleArray(videos);
-          set({
-            playlist: {
-              ...state.playlist,
-              videos: shuffledVideos,
-              currentIndex: 0,
-              shuffle: true,
-            },
-          });
-        } else {
-          set({
-            playlist: {
-              ...state.playlist,
-              shuffle: false,
-              currentIndex: 0,
-            },
-          });
-        }
+        set((state) => ({ playlist: { ...state.playlist, shuffle: !state.playlist.shuffle } }));
       },
 
       toggleRepeat: () => {
+        set((state) => ({ playlist: { ...state.playlist, repeat: !state.playlist.repeat } }));
+      },
+
+      addCustomPlaylist: (playlist) => {
         set((state) => ({
-          playlist: {
-            ...state.playlist,
-            repeat: !state.playlist.repeat,
-          },
+            customPlaylists: [...state.customPlaylists, { ...playlist, id: crypto.randomUUID() }],
+        }));
+      },
+      updateCustomPlaylist: (playlist) => {
+        set((state) => ({
+            customPlaylists: state.customPlaylists.map((p) => (p.id === playlist.id ? playlist : p)),
+        }));
+      },
+      deleteCustomPlaylist: (id) => {
+        set((state) => ({
+            customPlaylists: state.customPlaylists.filter((p) => p.id !== id),
         }));
       },
     }),
     {
       name: 'focus-app-storage',
-      version: 2, // Bump version due to state changes
+      version: 2, 
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: any, version: number) => {
+        const state = { ...DEFAULT_STATE, ...persistedState };
         if (version < 2) {
-          persistedState.workPlaylist = DEFAULT_PLAYLIST_DATA;
-          persistedState.breakPlaylist = DEFAULT_PLAYLIST_DATA;
-        }
-        
-        const state = {
-          ...DEFAULT_STATE,
-          ...persistedState,
-          playlist: {
-            ...DEFAULT_STATE.playlist,
-            ...persistedState?.playlist,
-          },
-        };
-
-        if (!state.breakActivities) {
-          state.breakActivities = defaultBreakActivities;
+          if (!persistedState.workPlaylist) state.workPlaylist = DEFAULT_PLAYLIST_DATA;
+          if (!persistedState.breakPlaylist) state.breakPlaylist = DEFAULT_PLAYLIST_DATA;
+          if (!persistedState.pendingPlaylist) state.pendingPlaylist = { name: null, url: null };
         }
         return state;
       },
