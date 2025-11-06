@@ -14,7 +14,7 @@ export const newPlaylists: Playlist[] = [
     name: 'Lo-fi beats',
     icon: EMOJIS.NIGHT,
     description: 'Perfect for chill studying',
-    url: 'https://music.youtube.com/channel/UCkXd-JReGCj32ZjQVywYUqw',
+    url: 'https://music.youtube.com/playlist?list=OLAK5uy_lF8f3PwAOPekbLaM1jRSHIMQApVWi8A4c',
   },
   {
     id: 'hardstyle',
