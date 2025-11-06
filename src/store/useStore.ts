@@ -52,6 +52,9 @@ interface StoreState {
   pendingPlaylist: PendingPlaylist;
   customPlaylists: CustomPlaylist[];
   globalVolume: number;
+
+  // Clock State
+  clockFormat: '12h' | '24h';
   
   // Actions
   login: (response: any) => void;
@@ -90,6 +93,9 @@ interface StoreState {
   addCustomPlaylist: (playlist: Omit<CustomPlaylist, 'id'>) => void;
   updateCustomPlaylist: (playlist: CustomPlaylist) => void;
   deleteCustomPlaylist: (id: string) => void;
+
+  // Clock Actions
+  setClockFormat: (format: '12h' | '24h') => void;
 }
 
 const DEFAULT_SETTINGS: PomodoroSettings = {
@@ -135,6 +141,7 @@ const DEFAULT_STATE = {
   breakActivities: defaultBreakActivities,
   customPlaylists: [],
   globalVolume: 70,
+  clockFormat: '12h' as const,
 };
 
 // Fisher-Yates shuffle algorithm
@@ -435,6 +442,10 @@ export const useStore = create<StoreState>()(
         set((state) => ({
             customPlaylists: state.customPlaylists.filter((p) => p.id !== id),
         }));
+      },
+
+      setClockFormat: (format) => {
+        set({ clockFormat: format });
       },
     }),
     {

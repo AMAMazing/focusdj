@@ -258,14 +258,14 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     const autoZoomEnabled = true; // Set to true to automatically fit content to the screen.
 
     // --- These settings are ONLY used when autoZoomEnabled = true ---
-    const autoZoomPadding = 0.025 // e.g., 0.05 means content will use 95% of the screen height.
+    const autoZoomPadding = 0.03 // e.g., 0.05 means content will use 95% of the screen height.
 
     // --- These settings are ONLY used when autoZoomEnabled = false ---
     const manualDefaultZoom = 0.7;
     const manualFullscreenZoom = 0.9;
 
     const store = useStore();
-    const { playlist, currentSession, isRunning, timeRemaining, pomodoroStats, focusGoal, pendingPlaylist, breakPlaylist } = store;
+    const { playlist, currentSession, isRunning, timeRemaining, pomodoroStats, focusGoal, pendingPlaylist, breakPlaylist, clockFormat, setClockFormat } = store;
     const currentVideo = playlist.videos[playlist.currentIndex];
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -278,6 +278,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     const [time, setTime] = useState(new Date());
     const [activity, setActivity] = useState({ description: '', category: 'Energizing' as 'Energizing' | 'Restorative', duration: 5 });
     const activityCategories = [{ type: 'Energizing', icon: Zap }, { type: 'Restorative', icon: Lightbulb }];
+    const [isClockMenuOpen, setIsClockMenuOpen] = useState(false);
 
     const [dynamicZoom, setDynamicZoom] = useState(1.0);
     const nonFullscreenWrapperRef = useRef<HTMLDivElement>(null);
@@ -414,9 +415,41 @@ const mainContent = (
                     {currentSession === 'work' && focusGoal.mainGoal && <div className="bg-zinc-800 p-4 rounded-lg mb-6"><div className="flex justify-between items-start gap-2"><div><h3 className="font-bold text-lg">{focusGoal.mainGoal}</h3>{focusGoal.howToAchieve && <p className="text-sm text-zinc-400 mt-1">{focusGoal.howToAchieve}</p>}</div><button onClick={() => store.toggleFocusGoalModal(true)} className="p-1.5 text-zinc-500 hover:text-white"><Edit size={14} /></button></div></div>}
                     <div className="flex items-center justify-center gap-2 text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] mb-6 smooth-color-transition"><CheckCircle size={16} /><span className="text-sm">{pomodoroStats.totalMinutesToday} min today</span></div>
                     <div className="relative mb-8 w-72 h-72 mx-auto rounded-full flex items-center justify-center bg-zinc-800">
-                        <div className="text-center"><div className="text-xs text-zinc-500 mb-2">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div><div className="text-7xl font-light mb-6">{`${String(Math.floor(timeRemaining / 60)).padStart(2, '0')}:${String(timeRemaining % 60).padStart(2, '0')}`}</div>
+                        <div className="text-center">
+                            <div className="relative">
+                                <div 
+                                    className="text-lg font-medium text-zinc-400 mb-2 cursor-pointer hover:text-white transition-colors"
+                                    onClick={() => setIsClockMenuOpen(prev => !prev)}
+                                >
+                                    {time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: clockFormat === '12h' })}
+                                </div>
+                                {isClockMenuOpen && (
+                                    <div 
+                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-10"
+                                    >
+                                        <div className="p-2">
+                                            <p className="text-xs text-zinc-500 px-2 pb-1">Clock Format</p>
+                                            <button 
+                                                onClick={() => { setClockFormat('12h'); setIsClockMenuOpen(false); }} 
+                                                className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '12h' ? 'text-white' : 'text-zinc-400'}`}
+                                            >
+                                                <span>12-hour</span>
+                                                {clockFormat === '12h' && <CheckCircle size={14} />}
+                                            </button>
+                                            <button 
+                                                onClick={() => { setClockFormat('24h'); setIsClockMenuOpen(false); }} 
+                                                className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '24h' ? 'text-white' : 'text-zinc-400'}`}
+                                            >
+                                                <span>24-hour</span>
+                                                {clockFormat === '24h' && <CheckCircle size={14} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="text-7xl font-light mb-6">{`${String(Math.floor(timeRemaining / 60)).padStart(2, '0')}:${String(timeRemaining % 60).padStart(2, '0')}`}</div>
                             <div className="flex justify-center gap-3">
-                                <button onClick={isRunning ? store.pauseTimer : () => !focusGoal.mainGoal && currentSession === 'work' ? store.toggleFocusGoalModal(true) : store.startTimer()} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
+                                <button onClick={isRunning ? store.pauseTimer : () => !focusGoal.mainGoal && currentSession === 'work' ? store.toggleFocusGoalModal(true) : store.startTimer()} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition\">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
                                 <button onClick={store.resetTimer} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><RotateCcw size={20} /></button>
                                 <button onClick={store.skipSession} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><SkipForward size={20} /></button>
                             </div>
@@ -454,7 +487,7 @@ const mainContent = (
                 <div className="space-y-4">
                     <textarea value={goal.mainGoal} onChange={e => setGoal({ ...goal, mainGoal: e.target.value })} placeholder="What do you want to accomplish?" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={3} />
                     <textarea value={goal.howToAchieve} onChange={e => setGoal({ ...goal, howToAchieve: e.target.value })} placeholder="Break it down..." className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={4} />
-                    <button onClick={() => { store.setFocusGoal(goal); store.toggleFocusGoalModal(false); store.startTimer(); }} className="w-full py-3 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-full font-bold smooth-color-transition">Start Focusing</button>
+                    <button onClick={() => { store.setFocusGoal(goal); store.toggleFocusGoalModal(false); store.startTimer(); }} className="w-full py-3 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-full font-bold smooth-color-transition\">Start Focusing</button>
                 </div>
             </Modal>
             <PlaylistModal isOpen={activeModal === 'focusPlaylist'} onClose={() => setActiveModal(null)} onSelect={p => loadPlaylist(p, false)} title="Set Focus Playlist" />
@@ -479,8 +512,8 @@ const mainContent = (
                         style={{ transform: `scale(${dynamicZoom})`, transformOrigin: 'center top', transition: 'transform 0.2s ease-out' }}
                     >
                         <header className="p-6 flex justify-between items-center">
-                            <h1 className="text-3xl font-bold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] smooth-color-transition">FocusDJ</h1>
-                            <button onClick={() => !document.fullscreenElement ? document.documentElement.requestFullscreen() : document.exitFullscreen()} className="p-2 text-zinc-500 hover:text-white transition"><Maximize size={20} /></button>
+                            <h1 className="text-3xl font-bold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] smooth-color-transition\">FocusDJ</h1>
+                            <button onClick={() => !document.fullscreenElement ? document.documentElement.requestFullscreen() : document.exitFullscreen()} className="p-2 text-zinc-500 hover:text-white transition\"><Maximize size={20} /></button>
                         </header>
                         <main className="px-6 pb-8">
                             {mainContent}
