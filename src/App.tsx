@@ -475,7 +475,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
             let playlistUrl = '';
 
             if (Array.isArray(p)) {
-                const videoPromises = p.map(sp => fetchPlaylistVideos(sp.url, sp.yearAfter));
+                const videoPromises = p.map(sp => fetchPlaylistVideos(sp.url, sp.yearAfter, sp.indexLimit));
                 const videoArrays = await Promise.all(videoPromises);
                 videos = videoArrays.flat();
                 playlistName = `${p.length} Playlist Mix`;
@@ -598,10 +598,45 @@ const mainContent = (
         <div className="min-h-screen bg-black text-white">
             {currentVideo && <AccentColorExtractor videoId={currentVideo.id} />}
             <Modal isOpen={store.isFocusGoalModalOpen} onClose={() => store.toggleFocusGoalModal(false)} title="Set Your Focus">
-                <div className="space-y-4">
-                    <textarea value={goal.mainGoal} onChange={e => setGoal({ ...goal, mainGoal: e.target.value })} placeholder="What do you want to accomplish?" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={3} />
-                    <textarea value={goal.howToAchieve} onChange={e => setGoal({ ...goal, howToAchieve: e.target.value })} placeholder="Break it down..." className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={4} />
-                    <button onClick={() => { store.setFocusGoal(goal); store.toggleFocusGoalModal(false); store.startTimer(); }} className="w-full py-3 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-full font-bold smooth-color-transition">Start Focusing</button>
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-zinc-300">Your Goal</label>
+                            <span className="text-xs text-zinc-500">Optional</span>
+                        </div>
+                        <textarea 
+                            value={goal.mainGoal} 
+                            onChange={e => setGoal({ ...goal, mainGoal: e.target.value })} 
+                            placeholder="What do you want to accomplish?" 
+                            className="w-full p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] focus:bg-zinc-900/80 outline-none resize-none placeholder:text-zinc-600" 
+                            rows={3} 
+                        />
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-zinc-300">Action Steps</label>
+                            <span className="text-xs text-zinc-500">Optional</span>
+                        </div>
+                        <textarea 
+                            value={goal.howToAchieve} 
+                            onChange={e => setGoal({ ...goal, howToAchieve: e.target.value })} 
+                            placeholder="Break it down into steps..." 
+                            className="w-full p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] focus:bg-zinc-900/80 outline-none resize-none placeholder:text-zinc-600" 
+                            rows={4} 
+                        />
+                    </div>
+
+                    <button 
+                        onClick={() => { 
+                            store.setFocusGoal(goal); 
+                            store.toggleFocusGoalModal(false); 
+                            store.startTimer(); 
+                        }} 
+                        className="w-full py-4 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-xl font-bold shadow-lg shadow-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))]/20 hover:shadow-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))]/30 active:scale-[0.98] transition-all"
+                    >
+                        Start Focusing
+                    </button>
                 </div>
             </Modal>
             <PlaylistModal isOpen={activeModal === 'focusPlaylist'} onClose={() => setActiveModal(null)} onSelect={p => loadPlaylist(p, false)} title="Set Focus Playlist" />

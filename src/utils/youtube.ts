@@ -80,7 +80,7 @@ const fetchVideoDetails = async (videoId: string): Promise<Video[]> => {
   }];
 };
 
-const fetchChannelVideos = async (channelId: string, yearAfter?: number): Promise<Video[]> => {
+const fetchChannelVideos = async (channelId: string, yearAfter?: number, indexLimit?: number): Promise<Video[]> => {
     if (!API_KEY) {
     throw new Error('YouTube API key is not configured');
   }
@@ -100,13 +100,18 @@ const fetchChannelVideos = async (channelId: string, yearAfter?: number): Promis
       throw new Error('No videos found for this channel');
     }
 
-    const videoIds = data.items.map((item: any) => item.id.videoId).join(',');
+    let videoIds = data.items.map((item: any) => item.id.videoId);
+    if (indexLimit) {
+        videoIds = videoIds.slice(0, indexLimit);
+    }
+    const videoIdsString = videoIds.join(',');
+
     const detailsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds}&key=${API_KEY}`
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIdsString}&key=${API_KEY}`
     );
     const detailsData = await detailsResponse.json();
 
-    return detailsData.items
+    let videos = detailsData.items
       .filter((video: any) => {
           if (yearAfter) {
               const videoYear = new Date(video.snippet.publishedAt).getFullYear();
@@ -121,13 +126,15 @@ const fetchChannelVideos = async (channelId: string, yearAfter?: number): Promis
         thumbnail: `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`,
         publishedAt: video.snippet.publishedAt,
       }));
+
+      return videos;
   } catch (error) {
     console.error('Error fetching channel videos:', error);
     throw new Error('Failed to load videos from the channel.');
   }
 }
 
-export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Promise<Video[]> => {
+export const fetchPlaylistVideos = async (url: string, yearAfter?: number, indexLimit?: number): Promise<Video[]> => {
   if (!API_KEY) {
     throw new Error('YouTube API key is not configured');
   }
@@ -140,7 +147,7 @@ export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Prom
   const playlistId = extractPlaylistId(url);
   if (playlistId) {
     try {
-      const videos: Video[] = [];
+      let videos: Video[] = [];
       let nextPageToken = '';
       
       do {
@@ -158,7 +165,15 @@ export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Prom
         
         const data = await response.json();
         
-        const videoIds = data.items
+        let items = data.items;
+        if (indexLimit) {
+            const remaining = indexLimit - videos.length;
+            if (items.length > remaining) {
+                items = items.slice(0, remaining);
+            }
+        }
+        
+        const videoIds = items
           .map((item: any) => item.snippet.resourceId.videoId)
           .join(',');
 
@@ -182,7 +197,7 @@ export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Prom
           ])
         );
         
-        const newVideos = data.items
+        const newVideos = items
           .filter((item: any) => {
             const details = videoDetails.get(item.snippet.resourceId.videoId);
             if (!details) return false;
@@ -212,6 +227,11 @@ export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Prom
           });
         
         videos.push(...newVideos);
+
+        if (indexLimit && videos.length >= indexLimit) {
+            break;
+        }
+
         nextPageToken = data.nextPageToken;
       } while (nextPageToken);
       
@@ -227,7 +247,7 @@ export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Prom
   
   const channelId = extractChannelId(url);
   if (channelId) {
-      return fetchChannelVideos(channelId, yearAfter);
+      return fetchChannelVideos(channelId, yearAfter, indexLimit);
   }
 
   throw new Error('Invalid URL. Please provide a valid YouTube or YouTube Music URL');

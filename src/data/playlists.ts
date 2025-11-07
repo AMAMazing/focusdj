@@ -4,6 +4,7 @@ export interface SubPlaylist {
   name: string;
   url: string;
   yearAfter?: number;
+  indexLimit?: number;
 }
 
 export interface Playlist {
@@ -29,7 +30,8 @@ export const newPlaylists: Playlist[] = [
     icon: EMOJIS.BOLT,
     description: 'A mix of uptempo, raw, and euphoric hardstyle.',
     subPlaylists: [
-      { name: 'Uptempo Hardstyle', url: 'https://music.youtube.com/channel/UCostFi-t69RswIeX3w1EZnA' },
+      { name: 'Promoting Hardstyle', url: 'https://music.youtube.com/channel/UCostFi-t69RswIeX3w1EZnA' },
+      { name: 'DJ Malona', url: 'https://www.youtube.com/playlist?list=PLEa3-cgxER-2qR-77E5Ncru-EkL0Kd-nM' },
     ]
   },
   {
@@ -54,9 +56,7 @@ export const newPlaylists: Playlist[] = [
     subPlaylists: [
       { name: 'Nik Sitz', url: 'https://www.youtube.com/playlist?list=OLAK5uy_lg_SSDjHhDn-ElZgeGbDYPYcadrS299Hw' },
       { name: 'Restricted', url: 'https://music.youtube.com/playlist?list=OLAK5uy_nEu3J8fFVmbPTs_2fNn1cOVua6UNVPa1s', yearAfter: 2024 },
-      { name: 'TNT', url: 'https://music.youtube.com/playlist?list=OLAK5uy_l82WN-nfge7IfVkOZuQGeuDO1XwH8VzbE', yearAfter: 2021 },
-      { name: 'APHØTIC', url: 'https://music.youtube.com/playlist?list=OLAK5uy_kaAguKQp20wXLkJ-3i9P9dRRcSeliLzl4' },
-      { name: 'Tweekacore', url: 'https://music.youtube.com/playlist?list=OLAK5uy_lef9HMfHKqe_CW2_2Z5DgZFNYytoI5bW8' },
+      { name: 'TNT', url: 'https://music.youtube.com/playlist?list=OLAK5uy_mTwKrWRDz-oyl02lLmLBVHQYagG5ypFFI', yearAfter: 2021, indexLimit: 34 },
     ]
   },
   {
