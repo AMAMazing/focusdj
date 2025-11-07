@@ -5,4 +5,5 @@ export const EMOJIS = {
   DRUM: '\uD83E\uDD41',         // 🥁
   RADIOACTIVE: '\u2622',   // ☢️
   VIOLIN: '\uD83C\uDFBB', // 🎻
+  DOT: '\u2022' // •
 };
