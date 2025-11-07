@@ -76,10 +76,11 @@ const fetchVideoDetails = async (videoId: string): Promise<Video[]> => {
     title: video.snippet.title,
     duration: formatDuration(video.contentDetails.duration),
     thumbnail: `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`,
+    publishedAt: video.snippet.publishedAt,
   }];
 };
 
-const fetchChannelVideos = async (channelId: string): Promise<Video[]> => {
+const fetchChannelVideos = async (channelId: string, yearAfter?: number): Promise<Video[]> => {
     if (!API_KEY) {
     throw new Error('YouTube API key is not configured');
   }
@@ -105,19 +106,28 @@ const fetchChannelVideos = async (channelId: string): Promise<Video[]> => {
     );
     const detailsData = await detailsResponse.json();
 
-    return detailsData.items.map((video: any) => ({
-      id: video.id,
-      title: video.snippet.title,
-      duration: formatDuration(video.contentDetails.duration),
-      thumbnail: `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`,
-    }));
+    return detailsData.items
+      .filter((video: any) => {
+          if (yearAfter) {
+              const videoYear = new Date(video.snippet.publishedAt).getFullYear();
+              return videoYear >= yearAfter;
+          }
+          return true;
+      })
+      .map((video: any) => ({
+        id: video.id,
+        title: video.snippet.title,
+        duration: formatDuration(video.contentDetails.duration),
+        thumbnail: `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`,
+        publishedAt: video.snippet.publishedAt,
+      }));
   } catch (error) {
     console.error('Error fetching channel videos:', error);
     throw new Error('Failed to load videos from the channel.');
   }
 }
 
-export const fetchPlaylistVideos = async (url: string): Promise<Video[]> => {
+export const fetchPlaylistVideos = async (url: string, yearAfter?: number): Promise<Video[]> => {
   if (!API_KEY) {
     throw new Error('YouTube API key is not configured');
   }
@@ -135,7 +145,7 @@ export const fetchPlaylistVideos = async (url: string): Promise<Video[]> => {
       
       do {
         const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&key=${API_KEY}${nextPageToken ? `&pageToken=${nextPageToken}` : ''}`
+          `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}${nextPageToken ? `&pageToken=${nextPageToken}` : ''}`
         );
         
         if (!response.ok) {
@@ -151,30 +161,55 @@ export const fetchPlaylistVideos = async (url: string): Promise<Video[]> => {
         const videoIds = data.items
           .map((item: any) => item.snippet.resourceId.videoId)
           .join(',');
+
+        if (!videoIds) {
+            nextPageToken = data.nextPageToken;
+            continue;
+        }
         
-        const durationResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${API_KEY}`
+        const detailsResponse = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${videoIds}&key=${API_KEY}`
         );
         
-        const durationData = await durationResponse.json();
-        const durations = new Map(
-          durationData.items.map((item: any) => [
+        const detailsData = await detailsResponse.json();
+        const videoDetails = new Map<string, { duration: string; publishedAt: string }>(
+          (detailsData.items || []).map((item: any) => [
             item.id,
-            formatDuration(item.contentDetails.duration),
+            {
+              duration: formatDuration(item.contentDetails.duration),
+              publishedAt: item.snippet.publishedAt,
+            }
           ])
         );
         
         const newVideos = data.items
-          .filter((item: any) => 
-            item.snippet.title !== 'Private video' && 
-            item.snippet.title !== 'Deleted video'
-          )
-          .map((item: any) => ({
-            id: item.snippet.resourceId.videoId,
-            title: item.snippet.title,
-            duration: durations.get(item.snippet.resourceId.videoId) || 'Unknown',
-            thumbnail: `https://i.ytimg.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`,
-          }));
+          .filter((item: any) => {
+            const details = videoDetails.get(item.snippet.resourceId.videoId);
+            if (!details) return false;
+
+            const title = item.snippet.title;
+            if (title === 'Private video' || title === 'Deleted video' || title === 'Unavailable video') {
+              return false;
+            }
+            
+            if (yearAfter) {
+              const videoYear = new Date(details.publishedAt).getFullYear();
+              if (videoYear < yearAfter) {
+                return false;
+              }
+            }
+            return true;
+          })
+          .map((item: any) => {
+            const details = videoDetails.get(item.snippet.resourceId.videoId)!;
+            return {
+              id: item.snippet.resourceId.videoId,
+              title: item.snippet.title,
+              duration: details.duration,
+              thumbnail: `https://i.ytimg.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`,
+              publishedAt: details.publishedAt,
+            };
+          });
         
         videos.push(...newVideos);
         nextPageToken = data.nextPageToken;
@@ -192,13 +227,14 @@ export const fetchPlaylistVideos = async (url: string): Promise<Video[]> => {
   
   const channelId = extractChannelId(url);
   if (channelId) {
-      return fetchChannelVideos(channelId);
+      return fetchChannelVideos(channelId, yearAfter);
   }
 
   throw new Error('Invalid URL. Please provide a valid YouTube or YouTube Music URL');
 };
 
 function formatDuration(isoDuration: string): string {
+  if (!isoDuration) return 'Unknown';
   const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 'Unknown';
 

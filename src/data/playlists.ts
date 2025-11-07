@@ -1,11 +1,18 @@
 import { EMOJIS } from './emojis';
 
+export interface SubPlaylist {
+  name: string;
+  url: string;
+  yearAfter?: number;
+}
+
 export interface Playlist {
   id: string;
   name: string;
   description: string;
   icon: string;
-  url: string;
+  url?: string;
+  subPlaylists?: SubPlaylist[];
 }
 
 export const newPlaylists: Playlist[] = [
@@ -20,8 +27,10 @@ export const newPlaylists: Playlist[] = [
     id: 'hardstyle',
     name: 'Hardstyle',
     icon: EMOJIS.BOLT,
-    description: 'Perfect for high energy workouts',
-    url: 'https://music.youtube.com/channel/UCostFi-t69RswIeX3w1EZnA',
+    description: 'A mix of uptempo, raw, and euphoric hardstyle.',
+    subPlaylists: [
+      { name: 'Uptempo Hardstyle', url: 'https://music.youtube.com/channel/UCostFi-t69RswIeX3w1EZnA' },
+    ]
   },
   {
     id: 'aesthetic-beats',
@@ -41,8 +50,14 @@ export const newPlaylists: Playlist[] = [
     id: 'hard-techno',
     name: 'Hard Techno',
     icon: EMOJIS.RADIOACTIVE,
-    description: 'Perfect for loud studying',
-    url: 'https://www.youtube.com/playlist?list=PLWIwHErYlmlrklTcqynBBrBd1Bkn2hpaH',
+    description: 'A blend of early hardstyle and hard techno.',
+    subPlaylists: [
+      { name: 'Nik Sitz', url: 'https://www.youtube.com/playlist?list=OLAK5uy_lg_SSDjHhDn-ElZgeGbDYPYcadrS299Hw' },
+      { name: 'Restricted', url: 'https://music.youtube.com/playlist?list=OLAK5uy_nEu3J8fFVmbPTs_2fNn1cOVua6UNVPa1s', yearAfter: 2024 },
+      { name: 'TNT', url: 'https://music.youtube.com/playlist?list=OLAK5uy_l82WN-nfge7IfVkOZuQGeuDO1XwH8VzbE', yearAfter: 2021 },
+      { name: 'APHØTIC', url: 'https://music.youtube.com/playlist?list=OLAK5uy_kaAguKQp20wXLkJ-3i9P9dRRcSeliLzl4' },
+      { name: 'Tweekacore', url: 'https://music.youtube.com/playlist?list=OLAK5uy_lef9HMfHKqe_CW2_2Z5DgZFNYytoI5bW8' },
+    ]
   },
   {
     id: 'classical',

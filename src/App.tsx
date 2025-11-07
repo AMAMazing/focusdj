@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from './store/useStore';
 import { fetchPlaylistVideos } from './utils/youtube';
-import { Music, Maximize, Lightbulb, Zap, Plus, Trash2, X, Upload, Download, SkipBack, SkipForward, Volume2, ChevronDown, ChevronUp, RotateCcw, Edit, RefreshCw, Shuffle, Repeat, CheckCircle, Ban, LucideProps } from 'lucide-react';
+import { Music, Maximize, Lightbulb, Zap, Plus, Trash2, X, Upload, Download, SkipBack, SkipForward, Volume2, ChevronDown, ChevronUp, RotateCcw, Edit, RefreshCw, Shuffle, Repeat, CheckCircle, Ban, LucideProps, ArrowLeft } from 'lucide-react';
 import YouTube from 'react-youtube';
-import { newPlaylists } from './data/playlists';
+import { newPlaylists, SubPlaylist } from './data/playlists';
 import { useColor } from 'color-thief-react';
 import { Video } from './types';
 import { CustomPlaylist } from './store/useStore';
@@ -81,12 +81,13 @@ interface Playlist {
     name: string;
     description: string;
     icon: string;
-    url: string;
+    url?: string;
+    subPlaylists?: SubPlaylist[];
 }
 interface PlaylistModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSelect: (playlist: Playlist | CustomPlaylist | null) => void;
+    onSelect: (playlist: Playlist | CustomPlaylist | SubPlaylist[] | null) => void;
     title: string;
 }
 
@@ -95,6 +96,8 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     const [view, setView] = useState('library'); // 'library', 'custom', 'import'
     const [newPlaylist, setNewPlaylist] = useState({ name: '', url: '' });
     const [editingPlaylist, setEditingPlaylist] = useState<CustomPlaylist | null>(null);
+    const [activeGroup, setActiveGroup] = useState<Playlist | null>(null);
+    const [selectedSubPlaylists, setSelectedSubPlaylists] = useState<SubPlaylist[]>([]);
 
     const handleImport = () => {
         if (newPlaylist.url.trim()) {
@@ -122,66 +125,129 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
         setNewPlaylist({ name: '', url: '' });
     };
 
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title={title}>
-            <div className="flex flex-col space-y-4">
-                <div className="flex justify-center gap-2 border-b border-zinc-800">
-                    <button onClick={() => setView('library')} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'library' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Library</button>
-                    <button onClick={() => setView('custom')} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'custom' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Custom</button>
-                    <button onClick={handleImportTabClick} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'import' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Import</button>
-                </div>
+    const handleSubPlaylistToggle = (subPlaylist: SubPlaylist) => {
+        setSelectedSubPlaylists(prev => 
+            prev.some(p => p.url === subPlaylist.url)
+                ? prev.filter(p => p.url !== subPlaylist.url)
+                : [...prev, subPlaylist]
+        );
+    };
 
-                <div className="min-h-[350px] max-h-[70vh] flex flex-col">
-                    {view === 'library' && (
-                        <div className="flex-grow overflow-y-auto p-1 sm:p-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {newPlaylists.map(p => (
-                                    <button key={p.id} onClick={() => { onSelect(p); onClose(); }} className="bg-zinc-800 rounded-lg p-3 sm:p-4 hover:bg-zinc-700 transition text-left group flex items-center min-h-[5.5rem]">
-                                        <div className="flex items-center gap-3 w-full">
-                                            <span className="text-3xl flex-shrink-0">{p.icon}</span>
-                                            <div className="min-w-0 flex-1">
-                                                <h3 className="font-semibold text-sm mb-1 line-clamp-2 sm:line-clamp-1">{p.name}</h3>
-                                                <p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{p.description}</p>
-                                            </div>
-                                        </div>
-                                    </button>
+    const handleMixSelect = () => {
+        if (selectedSubPlaylists.length > 0) {
+            onSelect(selectedSubPlaylists);
+            onClose();
+        }
+    };
+    
+    useEffect(() => {
+        // Reset view when modal is closed
+        if (!isOpen) {
+            setTimeout(() => {
+                setActiveGroup(null);
+                setSelectedSubPlaylists([]);
+                setView('library');
+            }, 200); // delay to allow for closing animation
+        }
+    }, [isOpen]);
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={activeGroup ? `Select from ${activeGroup.name}` : title}>
+            <div className="flex flex-col space-y-4">
+                {activeGroup ? (
+                    <>
+                        <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+                           <button onClick={() => setActiveGroup(null)} className="p-1 text-zinc-500 hover:text-white"><ArrowLeft size={18} /></button>
+                           <h3 className="font-semibold">{activeGroup.name}</h3>
+                        </div>
+                        <div className="min-h-[350px] max-h-[70vh] flex flex-col space-y-3 p-1">
+                            <div className="flex-grow overflow-y-auto space-y-2">
+                                {activeGroup.subPlaylists?.map(sp => (
+                                    <label key={sp.url} className="flex items-center gap-3 p-3 bg-zinc-800 rounded-lg hover:bg-zinc-700 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedSubPlaylists.some(p => p.url === sp.url)} 
+                                            onChange={() => handleSubPlaylistToggle(sp)}
+                                            className="h-5 w-5 rounded bg-zinc-700 border-zinc-600 text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] focus:ring-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))]"
+                                        />
+                                        <span className="text-sm font-medium">{sp.name}</span>
+                                    </label>
                                 ))}
                             </div>
-                            <button onClick={() => { onSelect(null); onClose(); }} className="w-full mt-3 bg-zinc-800 rounded-lg p-4 hover:bg-zinc-700 transition flex items-center justify-center gap-3 h-16">
-                                <Ban size={18} className="flex-shrink-0" />
-                                <span className="font-semibold text-sm">No Playlist</span>
+                           <button onClick={handleMixSelect} disabled={selectedSubPlaylists.length === 0} className="w-full py-3 bg-white text-black rounded-full font-bold disabled:bg-zinc-600 disabled:text-zinc-400">
+                                Mix {selectedSubPlaylists.length} Playlist{selectedSubPlaylists.length !== 1 && 's'}
                             </button>
                         </div>
-                    )}
+                    </>
+                ) : (
+                    <>
+                        <div className="flex justify-center gap-2 border-b border-zinc-800">
+                            <button onClick={() => setView('library')} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'library' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Library</button>
+                            <button onClick={() => setView('custom')} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'custom' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Custom</button>
+                            <button onClick={handleImportTabClick} className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${view === 'import' ? 'text-white border-b-2 border-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Import</button>
+                        </div>
 
-                    {view === 'custom' && (
-                        <div className="flex-grow overflow-y-auto space-y-2 p-1 sm:p-2">
-                            {customPlaylists.map(p => (
-                                <div key={p.id} className="bg-zinc-800 rounded-lg p-3 flex justify-between items-center gap-2">
-                                    <button onClick={() => { onSelect(p); onClose(); }} className="text-left flex-1 min-w-0">
-                                        <h3 className="font-semibold truncate text-sm">{p.name}</h3>
-                                        <p className="text-xs text-zinc-400 truncate">{p.url}</p>
+                        <div className="min-h-[350px] max-h-[70vh] flex flex-col">
+                            {view === 'library' && (
+                                <div className="flex-grow overflow-y-auto p-1 sm:p-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {newPlaylists.map(p => (
+                                            <button key={p.id} onClick={() => { 
+                                                if (p.subPlaylists && p.subPlaylists.length > 0) {
+                                                    setActiveGroup(p);
+                                                    setSelectedSubPlaylists(p.subPlaylists); // Select all by default
+                                                } else {
+                                                    onSelect(p); 
+                                                    onClose(); 
+                                                }
+                                            }} className="bg-zinc-800 rounded-lg p-3 sm:p-4 hover:bg-zinc-700 transition text-left group flex items-center min-h-[5.5rem]">
+                                                <div className="flex items-center gap-3 w-full">
+                                                    <span className="text-3xl flex-shrink-0">{p.icon}</span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold text-sm mb-1 line-clamp-2 sm:line-clamp-1">{p.name}</h3>
+                                                        <p className="text-xs text-zinc-400 line-clamp-2 leading-snug">{p.description}</p>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => { onSelect(null); onClose(); }} className="w-full mt-3 bg-zinc-800 rounded-lg p-4 hover:bg-zinc-700 transition flex items-center justify-center gap-3 h-16">
+                                        <Ban size={18} className="flex-shrink-0" />
+                                        <span className="font-semibold text-sm">No Playlist</span>
                                     </button>
-                                    <div className="flex gap-2 flex-shrink-0">
-                                        <button onClick={() => startEdit(p)} className="p-1 text-zinc-500 hover:text-white"><Edit size={16} /></button>
-                                        <button onClick={() => deleteCustomPlaylist(p.id)} className="p-1 text-zinc-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                </div>
+                            )}
+
+                            {view === 'custom' && (
+                                <div className="flex-grow overflow-y-auto space-y-2 p-1 sm:p-2">
+                                    {customPlaylists.map(p => (
+                                        <div key={p.id} className="bg-zinc-800 rounded-lg p-3 flex justify-between items-center gap-2">
+                                            <button onClick={() => { onSelect(p); onClose(); }} className="text-left flex-1 min-w-0">
+                                                <h3 className="font-semibold truncate text-sm">{p.name}</h3>
+                                                <p className="text-xs text-zinc-400 truncate">{p.url}</p>
+                                            </button>
+                                            <div className="flex gap-2 flex-shrink-0">
+                                                <button onClick={() => startEdit(p)} className="p-1 text-zinc-500 hover:text-white"><Edit size={16} /></button>
+                                                <button onClick={() => deleteCustomPlaylist(p.id)} className="p-1 text-zinc-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {customPlaylists.length === 0 && <p className="text-zinc-500 text-sm text-center py-8">No custom playlists. Import one!</p>}
+                                </div>
+                            )}
+
+                            {view === 'import' && (
+                                <div className="flex-grow flex flex-col justify-center p-2 sm:p-4">
+                                    <div className="space-y-4">
+                                        <input value={newPlaylist.name} onChange={e => setNewPlaylist({ ...newPlaylist, name: e.target.value })} placeholder="Playlist Name" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-white outline-none" />
+                                        <input value={newPlaylist.url} onChange={e => setNewPlaylist({ ...newPlaylist, url: e.target.value })} placeholder="YouTube Playlist URL" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-white outline-none" />
+                                        <button onClick={handleImport} className="w-full py-3 bg-white text-black rounded-full font-bold">{editingPlaylist ? 'Update' : 'Import'}</button>
                                     </div>
                                 </div>
-                            ))}
-                            {customPlaylists.length === 0 && <p className="text-zinc-500 text-sm text-center py-8">No custom playlists. Import one!</p>}
+                            )}
                         </div>
-                    )}
-
-                    {view === 'import' && (
-                        <div className="flex-grow flex flex-col justify-center p-2 sm:p-4">
-                            <div className="space-y-4">
-                                <input value={newPlaylist.name} onChange={e => setNewPlaylist({ ...newPlaylist, name: e.target.value })} placeholder="Playlist Name" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-white outline-none" />
-                                <input value={newPlaylist.url} onChange={e => setNewPlaylist({ ...newPlaylist, url: e.target.value })} placeholder="YouTube Playlist URL" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-white outline-none" />
-                                <button onClick={handleImport} className="w-full py-3 bg-white text-black rounded-full font-bold">{editingPlaylist ? 'Update' : 'Import'}</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                    </>
+                )}
             </div>
         </Modal>
     );
@@ -300,6 +366,29 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     }, []);
     
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const playlistIds = params.get('playlists')?.split(',');
+
+        if (playlistIds && playlistIds.length > 0) {
+            const playlistsFromUrl = newPlaylists.filter(p => playlistIds.includes(p.id));
+            
+            const itemsToLoad: SubPlaylist[] = playlistsFromUrl.flatMap(p => {
+                if (p.subPlaylists && p.subPlaylists.length > 0) {
+                    return p.subPlaylists;
+                }
+                if (p.url) {
+                    return [{ name: p.name, url: p.url }];
+                }
+                return [];
+            });
+
+            if (itemsToLoad.length > 0) {
+                loadPlaylist(itemsToLoad, false);
+            }
+        }
+    }, []); // Runs once on component mount
+
+    useEffect(() => {
       const root = document.documentElement;
       if (!currentVideo) {
         root.style.setProperty('--accent-hue', '0');
@@ -364,9 +453,9 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     ]);
   
   
-    const loadPlaylist = async (p: Playlist | CustomPlaylist | { url: string, name?: string } | null, isBreak = false) => {
+    const loadPlaylist = async (p: Playlist | CustomPlaylist | SubPlaylist[] | { url: string, name?: string } | null, isBreak = false) => {
         if (!p) {
-            const data = { name: 'None', videos: [], currentIndex: 0, volume: 70, shuffle: true, repeat: false, isPlaying: false, audioOnly: false };
+            const data = { name: 'None', videos: [], currentIndex: 0, volume: 70, shuffle: false, repeat: false, isPlaying: false, audioOnly: false };
             if (isBreak) {
                 store.setBreakPlaylist(data);
             } else {
@@ -381,13 +470,37 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
         setLoading(true);
         setError('');
         try {
-            const videos = await fetchPlaylistVideos(p.url);
-            const data = { name: p.name || 'Custom Playlist', videos, currentIndex: Math.floor(Math.random() * videos.length), volume: 70, shuffle: true, repeat: false, isPlaying: true, audioOnly: false };
+            let videos: Video[] = [];
+            let playlistName = 'Custom Mix';
+            let playlistUrl = '';
+
+            if (Array.isArray(p)) {
+                const videoPromises = p.map(sp => fetchPlaylistVideos(sp.url, sp.yearAfter));
+                const videoArrays = await Promise.all(videoPromises);
+                videos = videoArrays.flat();
+                playlistName = `${p.length} Playlist Mix`;
+                playlistUrl = p.map(sp => sp.url).join(',');
+            } else if ('url' in p && p.url) {
+                videos = await fetchPlaylistVideos(p.url);
+                playlistName = p.name || 'Custom Playlist';
+                playlistUrl = p.url;
+            } else {
+                throw new Error("Invalid playlist format provided.");
+            }
+            
+            // Shuffle the combined list of videos once
+            for (let i = videos.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [videos[i], videos[j]] = [videos[j], videos[i]];
+            }
+
+            const data = { name: playlistName, videos, currentIndex: 0, volume: 70, shuffle: false, repeat: false, isPlaying: true, audioOnly: false };
+            
             if (isBreak) {
                 store.setBreakPlaylist(data);
                 if (currentSession === 'break') store.setPlaylist(data);
             } else {
-                store.setPendingPlaylist({ name: data.name, url: p.url });
+                store.setPendingPlaylist({ name: data.name, url: playlistUrl });
                 if (currentSession === 'work') store.setPlaylist(data);
             }
         } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load'); }
@@ -450,7 +563,7 @@ const mainContent = (
                             </div>
                             <div className="text-7xl font-light mb-6">{`${String(Math.floor(timeRemaining / 60)).padStart(2, '0')}:${String(timeRemaining % 60).padStart(2, '0')}`}</div>
                             <div className="flex justify-center gap-3">
-                                <button onClick={isRunning ? store.pauseTimer : () => !focusGoal.mainGoal && currentSession === 'work' ? store.toggleFocusGoalModal(true) : store.startTimer()} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition\">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
+                                <button onClick={isRunning ? store.pauseTimer : () => !focusGoal.mainGoal && currentSession === 'work' ? store.toggleFocusGoalModal(true) : store.startTimer()} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
                                 <button onClick={store.resetTimer} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><RotateCcw size={20} /></button>
                                 <button onClick={store.skipSession} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><SkipForward size={20} /></button>
                             </div>
@@ -488,7 +601,7 @@ const mainContent = (
                 <div className="space-y-4">
                     <textarea value={goal.mainGoal} onChange={e => setGoal({ ...goal, mainGoal: e.target.value })} placeholder="What do you want to accomplish?" className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={3} />
                     <textarea value={goal.howToAchieve} onChange={e => setGoal({ ...goal, howToAchieve: e.target.value })} placeholder="Break it down..." className="w-full p-3 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" rows={4} />
-                    <button onClick={() => { store.setFocusGoal(goal); store.toggleFocusGoalModal(false); store.startTimer(); }} className="w-full py-3 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-full font-bold smooth-color-transition\">Start Focusing</button>
+                    <button onClick={() => { store.setFocusGoal(goal); store.toggleFocusGoalModal(false); store.startTimer(); }} className="w-full py-3 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-full font-bold smooth-color-transition">Start Focusing</button>
                 </div>
             </Modal>
             <PlaylistModal isOpen={activeModal === 'focusPlaylist'} onClose={() => setActiveModal(null)} onSelect={p => loadPlaylist(p, false)} title="Set Focus Playlist" />
@@ -513,8 +626,8 @@ const mainContent = (
                         style={{ transform: `scale(${dynamicZoom})`, transformOrigin: 'center top', transition: 'transform 0.2s ease-out' }}
                     >
                         <header className="p-6 flex justify-between items-center">
-                            <h1 className="text-3xl font-bold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] smooth-color-transition\">FocusDJ</h1>
-                            <button onClick={() => !document.fullscreenElement ? document.documentElement.requestFullscreen() : document.exitFullscreen()} className="p-2 text-zinc-500 hover:text-white transition\"><Maximize size={20} /></button>
+                            <h1 className="text-3xl font-bold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] smooth-color-transition">FocusDJ</h1>
+                            <button onClick={() => !document.fullscreenElement ? document.documentElement.requestFullscreen() : document.exitFullscreen()} className="p-2 text-zinc-500 hover:text-white transition"><Maximize size={20} /></button>
                         </header>
                         <main className="px-6 pb-8">
                             {mainContent}

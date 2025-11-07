@@ -3,6 +3,7 @@ export interface Video {
   title: string;
   duration: string;
   thumbnail: string;
+  publishedAt: string;
 }
 
 export interface PlaylistData {
