@@ -27,4 +27,5 @@ export interface PomodoroSettings {
 export interface PomodoroStats {
   totalMinutesToday: number;
   sessionsCompleted: number;
+  minutesFocused: number;
 }

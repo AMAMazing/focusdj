@@ -26,6 +26,17 @@ export interface CustomPlaylist {
     url: string;
 }
 
+// New interfaces for gamification features
+interface Streak {
+    current: number;
+    longest: number;
+    lastSessionDate: string | null;
+}
+
+interface ContributionData {
+    [date: string]: number; // Maps date string 'YYYY-MM-DD' to session count
+}
+
 interface StoreState {
   // Auth State
   isLoggedIn: boolean;
@@ -37,11 +48,18 @@ interface StoreState {
   currentSession: 'work' | 'break';
   timeRemaining: number;
   pomodoroSettings: PomodoroSettings;
+  settings: PomodoroSettings;
   pomodoroStats: PomodoroStats;
   timer: number | null;
   focusGoal: FocusGoal;
   isFocusGoalModalOpen: boolean;
   
+  // Gamification State
+  dailyGoal: number;
+  streak: Streak;
+  totalSessions: number;
+  contributionData: ContributionData;
+
   // Break Activities State
   breakActivities: BreakActivity[];
   
@@ -62,13 +80,14 @@ interface StoreState {
   startTimer: () => void;
   pauseTimer: () => void;
   resetTimer: () => void;
-  skipSession: () => void;
+  skipSession: (isCompleted: boolean) => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
   updatePomodoroStats: (minutes: number) => void;
   clearAllData: () => void;
   setFocusGoal: (goal: FocusGoal) => void;
   toggleFocusGoalModal: (isOpen: boolean) => void;
   resetPomodoro: () => void;
+  setDailyGoal: (goal: number) => void;
 
   // Data Management Actions
   exportData: () => void;
@@ -124,9 +143,11 @@ const DEFAULT_STATE = {
   currentSession: 'work' as const,
   timeRemaining: DEFAULT_SETTINGS.workDuration,
   pomodoroSettings: DEFAULT_SETTINGS,
+  settings: DEFAULT_SETTINGS,
   pomodoroStats: {
     totalMinutesToday: 0,
     sessionsCompleted: 0,
+    minutesFocused: 0,
   },
   timer: null,
   playlist: DEFAULT_PLAYLIST_DATA,
@@ -142,17 +163,18 @@ const DEFAULT_STATE = {
   customPlaylists: [],
   globalVolume: 70,
   clockFormat: '12h' as const,
+  // New default states for gamification
+  dailyGoal: 100,
+  streak: {
+      current: 0,
+      longest: 0,
+      lastSessionDate: null,
+  },
+  totalSessions: 0,
+  contributionData: {},
 };
 
-// Fisher-Yates shuffle algorithm
-const shuffleArray = <T>(array: T[]): T[] => {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-};
+// ... (keep shuffleArray if it's used, or remove)
 
 export const useStore = create<StoreState>()(
   persist(
@@ -179,7 +201,7 @@ export const useStore = create<StoreState>()(
       },
 
       startTimer: () => {
-        if (get().isRunning) return; // Guard clause: Don't start if already running.
+        if (get().isRunning) return;
 
         if (get().playlist.videos.length > 0) {
           get().setIsPlaying(true);
@@ -188,11 +210,18 @@ export const useStore = create<StoreState>()(
         const timerId = setInterval(() => {
           set(state => {
             if (state.timeRemaining > 1) {
+              if (state.currentSession === 'work') {
+                return { 
+                  timeRemaining: state.timeRemaining - 1,
+                  pomodoroStats: {
+                    ...state.pomodoroStats,
+                    minutesFocused: state.pomodoroStats.minutesFocused + 1/60,
+                  }
+                };
+              }
               return { timeRemaining: state.timeRemaining - 1 };
             }
-            // Timer has reached its end.
-            get().skipSession(); 
-            // skipSession will clear this interval, so we just return the final state.
+            get().skipSession(true); // Session completed
             return { timeRemaining: 0 };
           });
         }, 1000);
@@ -206,83 +235,78 @@ export const useStore = create<StoreState>()(
           clearInterval(timer);
         }
         get().setIsPlaying(false);
-        set({ isRunning: false, timer: null }); // Set timer to null to indicate it's cleared.
+        set({ isRunning: false, timer: null });
       },
       
       resetTimer: () => {
-        get().pauseTimer(); // Use pauseTimer to correctly clear interval and state.
+        get().pauseTimer();
         const { pomodoroSettings, currentSession } = get();
-        
         const duration = currentSession === 'work' 
           ? pomodoroSettings.workDuration 
           : pomodoroSettings.breakDuration;
-        
         set({ timeRemaining: duration });
       },
 
-      skipSession: () => {
-        get().pauseTimer(); // Safely stop the current timer before proceeding.
-
-        const currentState = get();
-
-        if (currentState.currentSession === 'work') {
-          const completedSeconds = currentState.pomodoroSettings.workDuration - currentState.timeRemaining;
-          const completedMinutes = Math.round(completedSeconds / 60);
-          const newSessionsCompleted = currentState.pomodoroStats.sessionsCompleted + 1;
-
-          set((state) => ({
-            pomodoroStats: {
-              totalMinutesToday: state.pomodoroStats.totalMinutesToday + completedMinutes,
-              sessionsCompleted: newSessionsCompleted,
-            },
-            focusGoal: { mainGoal: '', howToAchieve: '' },
-            workPlaylist: state.playlist,
-            playlist: state.breakPlaylist.videos.length > 0 ? state.breakPlaylist : DEFAULT_PLAYLIST_DATA,
-          }));
-          
-          const nextDuration = (newSessionsCompleted % currentState.pomodoroSettings.longBreakInterval === 0)
-            ? currentState.pomodoroSettings.longBreakDuration
-            : currentState.pomodoroSettings.breakDuration;
-          
-          set({
-            currentSession: 'break',
-            timeRemaining: nextDuration,
-          });
-          get().startTimer();
-
-        } else { // Break session has ended
-          (async () => {
-            const { pendingPlaylist, workPlaylist } = get();
-            let nextWorkPlaylist = workPlaylist.videos.length > 0 ? workPlaylist : DEFAULT_PLAYLIST_DATA;
-
-            if (pendingPlaylist.url && pendingPlaylist.url !== workPlaylist.name) { // Also check if it's a new playlist
-              try {
-                const videos = await fetchPlaylistVideos(pendingPlaylist.url);
-                const randomIndex = Math.floor(Math.random() * videos.length);
-                nextWorkPlaylist = {
-                  ...DEFAULT_PLAYLIST_DATA,
-                  name: pendingPlaylist.name,
-                  videos,
-                  currentIndex: randomIndex,
-                  shuffle: true,
-                };
-              } catch (error) {
-                console.error("Failed to fetch pending playlist", error);
+      skipSession: (isCompleted) => {
+          get().pauseTimer();
+          const state = get();
+      
+          if (state.currentSession === 'work') {
+              // Only update stats if the session was completed
+              if (isCompleted) {
+                  const today = new Date().toISOString().split('T')[0];
+                  const yesterday = new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0];
+                  
+                  set(s => {
+                      const newTotalSessions = s.totalSessions + 1;
+                      const newContributionData = { ...s.contributionData, [today]: (s.contributionData[today] || 0) + 1 };
+      
+                      let newStreak = { ...s.streak };
+                      if (s.streak.lastSessionDate === today) {
+                          // Already worked today, do nothing to streak
+                      } else if (s.streak.lastSessionDate === yesterday) {
+                          newStreak.current += 1; // Continue streak
+                      } else {
+                          newStreak.current = 1; // New streak
+                      }
+                      newStreak.lastSessionDate = today;
+                      newStreak.longest = Math.max(newStreak.current, newStreak.longest);
+      
+                      return {
+                          totalSessions: newTotalSessions,
+                          contributionData: newContributionData,
+                          streak: newStreak,
+                          pomodoroStats: {
+                            ...s.pomodoroStats,
+                            sessionsCompleted: s.pomodoroStats.sessionsCompleted + 1,
+                          }
+                      };
+                  });
               }
-            } else if (pendingPlaylist.name === 'None') {
-                nextWorkPlaylist = DEFAULT_PLAYLIST_DATA;
-            }
-            
-            set((state) => ({
-              playlist: nextWorkPlaylist,
-              workPlaylist: nextWorkPlaylist,
-              currentSession: 'work',
-              timeRemaining: state.pomodoroSettings.workDuration,
-            }));
-            
-            get().startTimer();
-          })();
-        }
+      
+              // Switch to break
+              const newSessionsCompleted = state.pomodoroStats.sessionsCompleted + (isCompleted ? 1 : 0);
+              const nextDuration = (newSessionsCompleted % state.pomodoroSettings.longBreakInterval === 0)
+                  ? state.pomodoroSettings.longBreakDuration
+                  : state.pomodoroSettings.breakDuration;
+      
+              set({
+                  currentSession: 'break',
+                  timeRemaining: nextDuration,
+                  focusGoal: { mainGoal: '', howToAchieve: '' },
+                  playlist: state.breakPlaylist.videos.length > 0 ? state.breakPlaylist : DEFAULT_PLAYLIST_DATA,
+              });
+      
+          } else { // Break session ended
+              set({
+                  currentSession: 'work',
+                  timeRemaining: state.pomodoroSettings.workDuration,
+                  playlist: state.workPlaylist.videos.length > 0 ? state.workPlaylist : DEFAULT_PLAYLIST_DATA,
+              });
+          }
+      
+          // Auto-start the next session's timer
+          get().startTimer();
       },
       
       updateSettings: (settings) => {
@@ -296,6 +320,7 @@ export const useStore = create<StoreState>()(
             
           return {
             pomodoroSettings: newSettings,
+            settings: newSettings,
             timeRemaining: newTimeRemaining,
           };
         });
@@ -325,7 +350,12 @@ export const useStore = create<StoreState>()(
         set({
           ...DEFAULT_STATE,
           pomodoroSettings: get().pomodoroSettings,
+          settings: get().pomodoroSettings,
         });
+      },
+
+      setDailyGoal: (goal) => {
+        set({ dailyGoal: Math.max(1, goal) });
       },
 
       exportData: () => {
@@ -440,7 +470,7 @@ export const useStore = create<StoreState>()(
       },
       deleteCustomPlaylist: (id) => {
         set((state) => ({
-            customPlaylists: state.customPlaylists.filter((p) => p.id !== id),
+            customPlaylists: state.customPlaylists.filter((p) => (p.id !== id)),
         }));
       },
 
@@ -450,14 +480,15 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'focus-app-storage',
-      version: 2, 
+      version: 3, // Bump version for migration
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: any, version: number) => {
-        const state = { ...DEFAULT_STATE, ...persistedState };
-        if (version < 2) {
-          if (!persistedState.workPlaylist) state.workPlaylist = DEFAULT_PLAYLIST_DATA;
-          if (!persistedState.breakPlaylist) state.breakPlaylist = DEFAULT_PLAYLIST_DATA;
-          if (!persistedState.pendingPlaylist) state.pendingPlaylist = { name: null, url: null };
+        let state = persistedState as StoreState;
+        if (version < 3) {
+            state.dailyGoal = 4;
+            state.streak = { current: 0, longest: 0, lastSessionDate: null };
+            state.totalSessions = 0;
+            state.contributionData = {};
         }
         return state;
       },

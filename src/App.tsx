@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from './store/useStore';
 import { fetchPlaylistVideos } from './utils/youtube';
-import { Music, Maximize, Lightbulb, Zap, Plus, Trash2, X, Upload, Download, SkipBack, SkipForward, Volume2, ChevronDown, ChevronUp, RotateCcw, Edit, RefreshCw, Shuffle, Repeat, CheckCircle, Ban, LucideProps, ArrowLeft } from 'lucide-react';
+import { Music, Maximize, Lightbulb, Zap, Plus, Trash2, X, Upload, Download, SkipBack, SkipForward, Volume2, ChevronDown, ChevronUp, RotateCcw, Edit, RefreshCw, Shuffle, Repeat, CheckCircle, Ban, LucideProps, ArrowLeft, Flame, Activity as ActivityIcon, Coffee } from 'lucide-react';
 import YouTube from 'react-youtube';
 import { newPlaylists, SubPlaylist } from './data/playlists';
 import { useColor } from 'color-thief-react';
@@ -118,7 +118,6 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
         setView('import');
     };
     
-    // Resets state when switching to the 'Import' tab from the tab button
     const handleImportTabClick = () => {
         setView('import');
         setEditingPlaylist(null);
@@ -141,13 +140,12 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     };
     
     useEffect(() => {
-        // Reset view when modal is closed
         if (!isOpen) {
             setTimeout(() => {
                 setActiveGroup(null);
                 setSelectedSubPlaylists([]);
                 setView('library');
-            }, 200); // delay to allow for closing animation
+            }, 200);
         }
     }, [isOpen]);
 
@@ -195,7 +193,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
                                             <button key={p.id} onClick={() => { 
                                                 if (p.subPlaylists && p.subPlaylists.length > 0) {
                                                     setActiveGroup(p);
-                                                    setSelectedSubPlaylists(p.subPlaylists); // Select all by default
+                                                    setSelectedSubPlaylists(p.subPlaylists);
                                                 } else {
                                                     onSelect(p); 
                                                     onClose(); 
@@ -259,8 +257,8 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
   }
   const VideoPlayer = ({ video, isRunning }: VideoPlayerProps) => {
     const playerRef = useRef<YouTubePlayer | null>(null);
-    const { playlist, setCurrentVideo, setVolume, toggleShuffle, toggleRepeat, globalVolume } = useStore();
-    const { videos, currentIndex, shuffle, repeat } = playlist;
+    const { playlist, setCurrentVideo, setVolume, toggleRepeat, globalVolume, setPlaylist } = useStore();
+    const { videos, currentIndex, repeat } = playlist;
   
     useEffect(() => {
       if (playerRef.current) {
@@ -273,6 +271,22 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     }, [isRunning]);
   
     if (!video) return <div className="flex flex-col items-center justify-center h-56 bg-zinc-900 rounded-lg"><Music size={40} className="text-zinc-700 mb-2" /><p className="text-sm text-zinc-500">No music loaded</p></div>;
+    
+    const handleShuffleClick = () => {
+        if (videos.length > currentIndex + 1) {
+            const currentAndPlayed = videos.slice(0, currentIndex + 1);
+            const upcoming = videos.slice(currentIndex + 1);
+
+            // Fisher-Yates shuffle for upcoming songs
+            for (let i = upcoming.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [upcoming[i], upcoming[j]] = [upcoming[j], upcoming[i]];
+            }
+
+            const newVideoList = [...currentAndPlayed, ...upcoming];
+            setPlaylist({ ...playlist, videos: newVideoList, shuffle: false });
+        }
+    };
     
     interface BtnProps {
         onClick: () => void;
@@ -296,7 +310,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
           <div className="flex items-center gap-2">
             <Btn onClick={() => currentIndex > 0 && setCurrentVideo(currentIndex - 1)} disabled={currentIndex === 0} icon={SkipBack} title="Previous"/>
             <Btn onClick={() => currentIndex < videos.length - 1 && setCurrentVideo(currentIndex + 1)} disabled={currentIndex === videos.length - 1} icon={SkipForward} title="Next" />
-            <Btn onClick={toggleShuffle} active={shuffle} icon={Shuffle} title="Shuffle" />
+            <Btn onClick={handleShuffleClick} active={false} icon={Shuffle} title="Shuffle Upcoming" />
             <Btn onClick={toggleRepeat} active={repeat} icon={Repeat} title="Repeat" />
           </div>
           <div className="flex items-center gap-2 w-32">
@@ -307,6 +321,133 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
       </div>
     );
   };
+
+const ContributionGraph = () => {
+    const { contributionData } = useStore();
+    const today = new Date();
+    const endDate = new Date(today.setDate(today.getDate() + (6 - today.getDay()))); 
+    const startDate = new Date(new Date().setDate(endDate.getDate() - 83));
+
+    const dates = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        dates.push(new Date(d));
+    }
+
+    const getColor = (count: number) => {
+        if (count >= 4) return 'bg-green-500';
+        if (count >= 3) return 'bg-green-600';
+        if (count >= 2) return 'bg-green-700';
+        if (count >= 1) return 'bg-green-800';
+        return 'bg-zinc-800';
+    };
+
+    return (
+        <div className="bg-zinc-900 rounded-2xl p-6">
+            <h3 className="text-lg font-bold mb-4">Activity</h3>
+            <div className="grid grid-cols-12 gap-1.5">
+                {dates.map(date => {
+                    const dateString = date.toISOString().split('T')[0];
+                    const count = contributionData[dateString] || 0;
+                    return <div key={dateString} className={`w-full aspect-square rounded-sm ${getColor(count)}`} title={`${count} sessions on ${date.toDateString()}`} />;
+                })}
+            </div>
+        </div>
+    );
+};
+
+const Stats = () => {
+    const { streak, totalSessions } = useStore();
+    return (
+        <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="bg-zinc-800 p-4 rounded-lg">
+                <p className="text-2xl font-bold flex items-center justify-center gap-1.5">{streak.current} <Flame size={20} className={streak.current > 0 ? 'text-orange-400' : 'text-zinc-600'} /></p>
+                <p className="text-xs text-zinc-400">Current Streak</p>
+            </div>
+            <div className="bg-zinc-800 p-4 rounded-lg">
+                <p className="text-2xl font-bold">{streak.longest}</p>
+                <p className="text-xs text-zinc-400">Longest Streak</p>
+            </div>
+            <div className="bg-zinc-800 p-4 rounded-lg">
+                <p className="text-2xl font-bold">{totalSessions}</p>
+                <p className="text-xs text-zinc-400">Total Sessions</p>
+            </div>
+        </div>
+    );
+}
+
+const DailyGoalTracker = () => {
+    const { pomodoroStats, dailyGoal, setDailyGoal, isRunning, currentSession } = useStore();
+    const [editingGoal, setEditingGoal] = useState(false);
+    const [newGoal, setNewGoal] = useState(dailyGoal);
+    const [liveSeconds, setLiveSeconds] = useState(0);
+    const [isGoalVisible, setIsGoalVisible] = useState(true);
+
+    useEffect(() => {
+        if (isRunning && currentSession === 'work') {
+            const interval = setInterval(() => {
+                setLiveSeconds(prev => prev + 1);
+            }, 1000);
+            return () => clearInterval(interval);
+        } else {
+            setLiveSeconds(0);
+        }
+    }, [isRunning, currentSession]);
+
+    const baseMinutes = Math.floor(pomodoroStats.minutesFocused || 0);
+    const totalSeconds = (baseMinutes * 60) + liveSeconds;
+    const minutesFocused = Math.floor(totalSeconds / 60);
+    const progress = Math.min((totalSeconds / (dailyGoal * 60)) * 100, 100);
+    const goalMet = minutesFocused >= dailyGoal;
+
+    const handleGoalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setNewGoal(parseInt(e.target.value, 10));
+    };
+
+    const handleGoalSave = () => {
+        if (newGoal > 0) {
+            setDailyGoal(newGoal);
+        }
+        setEditingGoal(false);
+    };
+
+    return (
+        <div className={`p-4 rounded-lg ${goalMet && isGoalVisible ? 'bg-green-900/50' : 'bg-zinc-800'}`}>
+            <div className={`flex justify-between items-center ${isGoalVisible ? 'mb-2' : ''}`}>
+                <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">{goalMet && isGoalVisible ? "Goal Achieved! Keep it up!" : "Today's Goal"}</p>
+                    <button onClick={() => setIsGoalVisible(!isGoalVisible)} className="text-zinc-500 hover:text-white">
+                        {isGoalVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                </div>
+                {isGoalVisible && (
+                    editingGoal ? (
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                value={newGoal}
+                                onChange={handleGoalChange}
+                                className="w-20 bg-zinc-700 text-white text-right rounded-md px-2 py-1 text-sm"
+                            />
+                            <button onClick={handleGoalSave} className="text-green-400 text-sm">Save</button>
+                        </div>
+                    ) : (
+                        <p 
+                            className={`text-sm font-bold cursor-pointer ${goalMet ? 'text-green-400' : ''}`}
+                            onClick={() => setEditingGoal(true)}
+                        >
+                            {minutesFocused} / {dailyGoal} minutes
+                        </p>
+                    )
+                )}
+            </div>
+            {isGoalVisible && (
+                <div className="w-full bg-zinc-700 rounded-full h-2.5">
+                    <div className="bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] h-2.5 rounded-full transition-all duration-200" style={{ width: `${progress}%` }}></div>
+                </div>
+            )}
+        </div>
+    );
+};
   
   // --- Main App Component ---
   export default function App() {
@@ -321,18 +462,13 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
       );
     }
   
-    // --- ZOOM CONFIGURATION ---
-    const autoZoomEnabled = true; // Set to true to automatically fit content to the screen.
-
-    // --- These settings are ONLY used when autoZoomEnabled = true ---
-    const autoZoomPadding = 0.03 // e.g., 0.05 means content will use 95% of the screen height.
-
-    // --- These settings are ONLY used when autoZoomEnabled = false ---
+    const autoZoomEnabled = true;
+    const autoZoomPadding = 0.03
     const manualDefaultZoom = 0.7;
     const manualFullscreenZoom = 0.9;
 
     const store = useStore();
-    const { playlist, currentSession, isRunning, timeRemaining, pomodoroStats, focusGoal, pendingPlaylist, breakPlaylist, clockFormat, setClockFormat } = store;
+    const { playlist, currentSession, isRunning, timeRemaining, focusGoal, pendingPlaylist, breakPlaylist, clockFormat, setClockFormat, settings, pauseTimer } = store;
     const currentVideo = playlist.videos[playlist.currentIndex];
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -346,13 +482,56 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
     const [activity, setActivity] = useState({ description: '', category: 'Energizing' as 'Energizing' | 'Restorative', duration: 5 });
     const activityCategories = [{ type: 'Energizing', icon: Zap }, { type: 'Restorative', icon: Lightbulb }];
     const [isClockMenuOpen, setIsClockMenuOpen] = useState(false);
+    const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+    const [isBreakActivityModalOpen, setIsBreakActivityModalOpen] = useState(false);
 
     const [dynamicZoom, setDynamicZoom] = useState(1.0);
     const nonFullscreenWrapperRef = useRef<HTMLDivElement>(null);
     const fullscreenContentRef = useRef<HTMLDivElement>(null);
-  
-    // --- CHANGE 1 of 3: Add new state to hold the calculated container height ---
     const [nonFullscreenHeight, setNonFullscreenHeight] = useState('auto');
+    const [celebrate, setCelebrate] = useState(false);
+
+    // --- TIMER AUTO-START FIX ---
+    const [workDurationWasSet, setWorkDurationWasSet] = useState(
+      () => localStorage.getItem('workDurationWasSet') === 'true'
+    );
+    const [breakDurationWasSet, setBreakDurationWasSet] = useState(
+      () => localStorage.getItem('breakDurationWasSet') === 'true'
+    );
+    const sessionRef = useRef(currentSession);
+
+    useEffect(() => {
+      if (sessionRef.current !== currentSession) {
+        store.resetTimer(); // FIX: Reset timer state on any session change to prevent invalid state
+        if (isRunning) {
+          if (currentSession === 'break' && !breakDurationWasSet) {
+            pauseTimer();
+          } else if (currentSession === 'work' && !workDurationWasSet) {
+            pauseTimer();
+          }
+        }
+        sessionRef.current = currentSession;
+      }
+    }, [currentSession, isRunning, pauseTimer, workDurationWasSet, breakDurationWasSet, store]);
+    // --- END FIX ---
+
+    // Calculate progress for the timer ring
+    const totalDuration = currentSession === 'work' ? settings.workDuration : settings.breakDuration;
+    const progress = totalDuration > 0 ? (totalDuration - timeRemaining) / totalDuration : 0;
+
+    useEffect(() => {
+        if (celebrate) {
+            const timer = setTimeout(() => setCelebrate(false), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [celebrate]);
+
+    useEffect(() => {
+        if (currentSession === 'break') {
+            setCelebrate(true);
+        }
+    }, [currentSession]);
+
 
     useEffect(() => {
       const handler = () => setFullscreen(!!document.fullscreenElement);
@@ -386,7 +565,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
                 loadPlaylist(itemsToLoad, false);
             }
         }
-    }, []); // Runs once on component mount
+    }, []);
 
     useEffect(() => {
       const root = document.documentElement;
@@ -398,17 +577,14 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
       }
     }, [currentVideo]);
 
-    // --- CHANGE 2 of 3: Update the useEffect to calculate and set the container height ---
     useEffect(() => {
         const calculateZoom = () => {
-            // --- MANUAL ZOOM LOGIC ---
             if (!autoZoomEnabled) {
                 setDynamicZoom(fullscreen ? manualFullscreenZoom : manualDefaultZoom);
-                if (!fullscreen) setNonFullscreenHeight('auto'); // Reset height if not auto-zooming
-                return; // Exit early
+                if (!fullscreen) setNonFullscreenHeight('auto');
+                return;
             }
 
-            // --- AUTOMATIC ZOOM LOGIC ---
             const TARGET_VIEWPORT_USAGE = 1 - autoZoomPadding;
             const availableHeight = window.innerHeight;
             const availableWidth = window.innerWidth;
@@ -426,7 +602,6 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
                 const newZoom = Math.min(heightRatio, widthRatio);
                 setDynamicZoom(newZoom);
 
-                // This is the key change: calculate the new visual height and set it for the container
                 if (!fullscreen) {
                     setNonFullscreenHeight(`${contentHeight * newZoom}px`);
                 }
@@ -488,7 +663,7 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
                 throw new Error("Invalid playlist format provided.");
             }
             
-            // Shuffle the combined list of videos once
+            // Shuffle the entire playlist on load
             for (let i = videos.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [videos[i], videos[j]] = [videos[j], videos[i]];
@@ -514,10 +689,34 @@ const PlaylistModal = ({ isOpen, onClose, onSelect, title }: PlaylistModalProps)
       reader.readAsText(file);
     };
     const footerActions = [
+      { label: 'Activity', icon: ActivityIcon, action: () => setIsActivityModalOpen(true), hover: 'hover:text-white' },
+      { label: 'Break Activities', icon: Coffee, action: () => setIsBreakActivityModalOpen(true), hover: 'hover:text-white' },
       { label: 'Import', icon: Upload, action: () => fileRef.current?.click(), hover: 'hover:text-white' },
       { label: 'Export', icon: Download, action: store.exportData, hover: 'hover:text-white' },
       { label: 'Clear', icon: Trash2, action: store.clearAllData, hover: 'hover:text-red-400' },
     ];
+
+    const handleStartTimer = () => {
+        if (currentSession === 'work' && !focusGoal.mainGoal && timeRemaining === settings.workDuration) {
+            store.toggleFocusGoalModal(true);
+        } else {
+            store.startTimer();
+        }
+    };
+    
+    const handleDurationSet = (minutes: number) => {
+      const newDuration = minutes * 60;
+      if (currentSession === 'work') {
+        store.updateSettings({ workDuration: newDuration });
+        setWorkDurationWasSet(true);
+        localStorage.setItem('workDurationWasSet', 'true');
+      } else {
+        store.updateSettings({ breakDuration: newDuration });
+        setBreakDurationWasSet(true);
+        localStorage.setItem('breakDurationWasSet', 'true');
+      }
+      store.resetTimer();
+    };
   
 const mainContent = (
     <>
@@ -527,51 +726,69 @@ const mainContent = (
                 <div className="bg-zinc-900 rounded-2xl p-8 flex-grow">
                     <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">{currentSession === 'work' ? 'Focus Timer' : 'Break Time'}</h2><button onClick={store.resetPomodoro} className="p-2 text-zinc-500 hover:text-white"><RefreshCw size={18} /></button></div>
                     {currentSession === 'work' && focusGoal.mainGoal && <div className="bg-zinc-800 p-4 rounded-lg mb-6"><div className="flex justify-between items-start gap-2"><div><h3 className="font-bold text-lg">{focusGoal.mainGoal}</h3>{focusGoal.howToAchieve && <p className="text-sm text-zinc-400 mt-1">{focusGoal.howToAchieve}</p>}</div><button onClick={() => store.toggleFocusGoalModal(true)} className="p-1.5 text-zinc-500 hover:text-white"><Edit size={14} /></button></div></div>}
-                    <div className="flex items-center justify-center gap-2 text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] mb-6 smooth-color-transition"><CheckCircle size={16} /><span className="text-sm">{pomodoroStats.totalMinutesToday} min today</span></div>
-                    <div className="relative mb-8 w-72 h-72 mx-auto rounded-full flex items-center justify-center bg-zinc-800">
-                        <div className="text-center">
-                            <div className="relative">
-                                <div 
-                                    className="text-lg font-medium text-zinc-400 mb-2 cursor-pointer hover:text-white transition-colors"
-                                    onClick={() => setIsClockMenuOpen(prev => !prev)}
-                                >
-                                    {time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: clockFormat === '12h' })}
-                                </div>
-                                {isClockMenuOpen && (
+<div className={`relative mb-8 w-80 h-80 mx-auto transition-transform duration-500 ${celebrate ? 'animate-bounce' : ''}`}>
+                        <svg width="320" height="320" viewBox="0 0 320 320" className="absolute inset-0 transform -rotate-90" style={{ overflow: 'visible' }}>
+                            <circle className="text-zinc-900" stroke="currentColor" strokeWidth="20" fill="transparent" r="150" cx="160" cy="160" />
+                            <circle
+                                className="smooth-color-transition"
+                                stroke="hsl(var(--accent-hue), var(--accent-saturation), var(--accent-lightness))"
+                                strokeWidth="20"
+                                strokeLinecap="butt"
+                                fill="transparent"
+                                r="150"
+                                cx="160"
+                                cy="160"
+                                pathLength="1"
+                                strokeDasharray="1"
+                                strokeDashoffset={1 - progress}
+                                style={{ transition: 'stroke-dashoffset 1s linear', filter: 'drop-shadow(0 0 10px hsl(var(--accent-hue), var(--accent-saturation), var(--accent-lightness)))' }}
+                            />
+                        </svg>
+                        <div className="relative w-full h-full rounded-full flex items-center justify-center bg-zinc-800">
+                            <div className="text-center z-10">
+                                <div className="relative">
                                     <div 
-                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-10"
+                                        className="text-lg font-medium text-zinc-400 mb-2 cursor-pointer hover:text-white transition-colors"
+                                        onClick={() => setIsClockMenuOpen(prev => !prev)}
                                     >
-                                        <div className="p-2">
-                                            <p className="text-xs text-zinc-500 px-2 pb-1">Clock Format</p>
-                                            <button 
-                                                onClick={() => { setClockFormat('12h'); setIsClockMenuOpen(false); }} 
-                                                className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '12h' ? 'text-white' : 'text-zinc-400'}`}
-                                            >
-                                                <span>12-hour</span>
-                                                {clockFormat === '12h' && <CheckCircle size={14} />}
-                                            </button>
-                                            <button 
-                                                onClick={() => { setClockFormat('24h'); setIsClockMenuOpen(false); }} 
-                                                className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '24h' ? 'text-white' : 'text-zinc-400'}`}
-                                            >
-                                                <span>24-hour</span>
-                                                {clockFormat === '24h' && <CheckCircle size={14} />}
-                                            </button>
-                                        </div>
+                                        {time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: clockFormat === '12h' })}
                                     </div>
-                                )}
-                            </div>
-                            <div className="text-7xl font-light mb-6">{`${String(Math.floor(timeRemaining / 60)).padStart(2, '0')}:${String(timeRemaining % 60).padStart(2, '0')}`}</div>
-                            <div className="flex justify-center gap-3">
-                                <button onClick={isRunning ? store.pauseTimer : () => !focusGoal.mainGoal && currentSession === 'work' ? store.toggleFocusGoalModal(true) : store.startTimer()} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
-                                <button onClick={store.resetTimer} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><RotateCcw size={20} /></button>
-                                <button onClick={store.skipSession} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><SkipForward size={20} /></button>
+                                    {isClockMenuOpen && (
+                                        <div 
+                                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-10"
+                                        >
+                                            <div className="p-2">
+                                                <p className="text-xs text-zinc-500 px-2 pb-1">Clock Format</p>
+                                                <button 
+                                                    onClick={() => { setClockFormat('12h'); setIsClockMenuOpen(false); }} 
+                                                    className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '12h' ? 'text-white' : 'text-zinc-400'}`}
+                                                >
+                                                    <span>12-hour</span>
+                                                    {clockFormat === '12h' && <CheckCircle size={14} />}
+                                                </button>
+                                                <button 
+                                                    onClick={() => { setClockFormat('24h'); setIsClockMenuOpen(false); }} 
+                                                    className={`w-full px-2 py-1.5 text-left text-sm rounded-md hover:bg-zinc-700 flex justify-between items-center ${clockFormat === '24h' ? 'text-white' : 'text-zinc-400'}`}
+                                                >
+                                                    <span>24-hour</span>
+                                                    {clockFormat === '24h' && <CheckCircle size={14} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="text-7xl font-light mb-6">{`${String(Math.floor(timeRemaining / 60)).padStart(2, '0')}:${String(timeRemaining % 60).padStart(2, '0')}`}</div>
+                                <div className="flex justify-center gap-3">
+                                    <button onClick={isRunning ? store.pauseTimer : handleStartTimer} className="w-12 h-12 rounded-full bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black flex items-center justify-center smooth-color-transition">{isRunning ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>}</button>
+                                    <button onClick={store.resetTimer} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><RotateCcw size={20} /></button>
+                                    <button onClick={() => store.skipSession(false)} className="w-12 h-12 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition"><SkipForward size={20} /></button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    {!isRunning && <div className="space-y-3"><div className="grid grid-cols-4 gap-2">{(currentSession === 'work' ? [15, 25, 45, 60] : [5, 10, 15, 20]).map(m => (<button key={m} onClick={() => { store.updateSettings(currentSession === 'work' ? { workDuration: m * 60 } : { breakDuration: m * 60 }); store.resetTimer(); }} className={`py-2.5 rounded-lg text-sm font-medium smooth-color-transition ${timeRemaining === m * 60 ? 'bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] text-black' : 'bg-zinc-700 hover:bg-zinc-600'}`}>{m}m</button>))}</div><div className="flex gap-2"><input value={customMin} onChange={e => setCustomMin(e.target.value)} onKeyDown={e => e.key === 'Enter' && +customMin && (store.updateSettings(currentSession === 'work' ? { workDuration: +customMin * 60 } : { breakDuration: +customMin * 60 }), store.resetTimer(), setCustomMin(''))} placeholder="Custom min" className="flex-1 px-4 py-2.5 bg-zinc-700 rounded-lg border border-zinc-600 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none text-sm smooth-color-transition" /><button onClick={() => +customMin && (store.updateSettings(currentSession === 'work' ? { workDuration: +customMin * 60 } : { breakDuration: +customMin * 60 }), store.resetTimer(), setCustomMin(''))} className="px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm font-medium">Set</button></div></div>}
+                    <DailyGoalTracker />
+                    {!isRunning && <div className="space-y-3 mt-4"><div className="grid grid-cols-4 gap-2">{(currentSession === 'work' ? [15, 25, 45, 60] : [5, 10, 15, 20]).map(m => (<button key={m} onClick={() => handleDurationSet(m)} className={`py-2.5 rounded-lg text-sm font-medium ${timeRemaining === m * 60 ? 'bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] text-black' : 'bg-zinc-700 hover:bg-zinc-600'}`}>{m}m</button>))}</div><div className="flex gap-2"><input value={customMin} onChange={e => setCustomMin(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && +customMin > 0) { handleDurationSet(+customMin); setCustomMin(''); } }} placeholder="Custom min" className="flex-1 px-4 py-2.5 bg-zinc-700 rounded-lg border border-zinc-600 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none text-sm smooth-color-transition" /><button onClick={() => { if (+customMin > 0) { handleDurationSet(+customMin); setCustomMin(''); } }} className="px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm font-medium">Set</button></div></div>}
                 </div>
-                {currentSession === 'break' && <div className="bg-zinc-900 rounded-2xl p-6 space-y-4"><h2 className="text-xl font-bold">Break Activities</h2>{activityCategories.map(({ type, icon: Icon }) => (<div key={type}><h3 className="flex items-center gap-2 font-semibold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] mb-3 smooth-color-transition"><Icon size={18} />{type}</h3><ul className="space-y-2">{store.breakActivities.filter(a => a.category === type).map(a => (<li key={a.id} className="flex justify-between items-center bg-zinc-800 p-3 rounded-lg"><span className="text-sm text-zinc-300">[{a.duration}m] {a.description}</span><button onClick={() => store.deleteBreakActivity(a.id)} className="text-zinc-500 hover:text-red-400"><Trash2 size={14} /></button></li>))}</ul></div>))}<div className="border-t border-zinc-800 pt-4 space-y-3"><input value={activity.description} onChange={e => setActivity({ ...activity, description: e.target.value })} onKeyDown={e => e.key === 'Enter' && activity.description.trim() && (store.addBreakActivity(activity), setActivity({ description: '', category: 'Energizing', duration: 5 }))} placeholder="New activity..." className="w-full px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" /><div className="flex gap-2"><select value={activity.category} onChange={e => setActivity({ ...activity, category: e.target.value as 'Energizing' | 'Restorative' })} className="px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition"><option>Energizing</option><option>Restorative</option></select><input type="number" min="1" value={activity.duration} onChange={e => setActivity({ ...activity, duration: +e.target.value })} className="w-20 px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" /><button onClick={() => activity.description.trim() && (store.addBreakActivity(activity), setActivity({ description: '', category: 'Energizing', duration: 5 }))} className="flex-1 px-4 py-2 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-lg font-bold flex items-center justify-center gap-2 smooth-color-transition"><Plus size={16} />Add</button></div></div></div>}
             </div>
             <div className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl">
                 <div className="p-6 border-b border-zinc-800 space-y-4">
@@ -639,6 +856,46 @@ const mainContent = (
                     </button>
                 </div>
             </Modal>
+            <Modal isOpen={isActivityModalOpen} onClose={() => setIsActivityModalOpen(false)} title="Activity & Stats">
+                <div className="space-y-4">
+                    <Stats />
+                    <ContributionGraph />
+                </div>
+            </Modal>
+            <Modal isOpen={isBreakActivityModalOpen} onClose={() => setIsBreakActivityModalOpen(false)} title="Break Activities">
+            <div className="bg-zinc-900 rounded-2xl p-6 space-y-4">
+                        {activityCategories.map(({ type, icon: Icon }) => (
+                            <div key={type}>
+                                <h3 className="flex items-center gap-2 font-semibold text-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] mb-3 smooth-color-transition">
+                                    <Icon size={18} />{type}
+                                </h3>
+                                <ul className="space-y-2">
+                                    {store.breakActivities.filter(a => a.category === type).map(a => (
+                                        <li key={a.id} className="flex justify-between items-center bg-zinc-800 p-3 rounded-lg">
+                                            <span className="text-sm text-zinc-300">[{a.duration}m] {a.description}</span>
+                                            <button onClick={() => store.deleteBreakActivity(a.id)} className="text-zinc-500 hover:text-red-400">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                        <div className="border-t border-zinc-800 pt-4 space-y-3">
+                            <input value={activity.description} onChange={e => setActivity({ ...activity, description: e.target.value })} onKeyDown={e => e.key === 'Enter' && activity.description.trim() && (store.addBreakActivity(activity), setActivity({ description: '', category: 'Energizing', duration: 5 }))} placeholder="New activity..." className="w-full px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" />
+                            <div className="flex gap-2">
+                                <select value={activity.category} onChange={e => setActivity({ ...activity, category: e.target.value as 'Energizing' | 'Restorative' })} className="px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition">
+                                    <option>Energizing</option>
+                                    <option>Restorative</option>
+                                </select>
+                                <input type="number" min="1" value={activity.duration} onChange={e => setActivity({ ...activity, duration: +e.target.value })} className="w-20 px-4 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:border-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] outline-none smooth-color-transition" />
+                                <button onClick={() => activity.description.trim() && (store.addBreakActivity(activity), setActivity({ description: '', category: 'Energizing', duration: 5 }))} className="flex-1 px-4 py-2 bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] hover:bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness-hover))] text-black rounded-lg font-bold flex items-center justify-center gap-2 smooth-color-transition">
+                                    <Plus size={16} />Add
+                                </button>
+                            </div>
+                        </div>
+                </div>
+            </Modal>
             <PlaylistModal isOpen={activeModal === 'focusPlaylist'} onClose={() => setActiveModal(null)} onSelect={p => loadPlaylist(p, false)} title="Set Focus Playlist" />
             <PlaylistModal isOpen={activeModal === 'breakPlaylist'} onClose={() => setActiveModal(null)} onSelect={p => loadPlaylist(p, true)} title="Set Break Playlist" />
             
@@ -653,7 +910,6 @@ const mainContent = (
                     </div>
                 </main>
             ) : (
-                // --- CHANGE 3 of 3: Wrap the non-fullscreen content in a new div with the dynamic height ---
                 <div style={{ height: nonFullscreenHeight, transition: 'height 0.2s ease-out' }}>
                     <div 
                         ref={nonFullscreenWrapperRef}
