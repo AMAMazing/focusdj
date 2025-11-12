@@ -22,7 +22,9 @@ export const newPlaylists: Playlist[] = [
     name: 'Lo-fi beats',
     icon: EMOJIS.NIGHT,
     description: 'Perfect for chill studying',
-    url: 'https://music.youtube.com/playlist?list=OLAK5uy_lF8f3PwAOPekbLaM1jRSHIMQApVWi8A4c',
+    subPlaylists: [
+    {name: 'Lo-fi Beats', url: 'https://music.youtube.com/playlist?list=OLAK5uy_ka-b2B2CGKB6VYXP2RuydJQgXc5bwvqis', indexLimit:100 }
+    ]
   },
   {
     id: 'hardstyle',
@@ -46,7 +48,12 @@ export const newPlaylists: Playlist[] = [
     name: 'Drum and Bass',
     icon: EMOJIS.DRUM,
     description: 'Perfect for upbeat studying',
-    url: 'https://www.youtube.com/playlist?list=PLwi8dzVzBhPUzCa1klpaLQer0qMs9rY3M',
+    subPlaylists: [
+      { name: 'Rova', url: 'https://music.youtube.com/playlist?list=OLAK5uy_kp_TJkd_ukO2kSwC7KZ8W9hMhnciWb3Gk' },
+      { name: 'Dimension', url: 'https://www.youtube.com/playlist?list=OLAK5uy_nTjZfN8mSMGBTqAWAweeBTr4KbOUMXa8k', indexLimit: 28 },
+      { name: 'Culture Shock', url: 'https://www.youtube.com/playlist?list=OLAK5uy_lFKjQg_BFYkDHqlRD-XpLDwwfIQN1JUKw', indexLimit: 21 },
+      { name: '1991', url: 'https://www.youtube.com/playlist?list=OLAK5uy_kdPWsYMKLXW2XjvGQi7Rs2E4eX3MOYlTQ', indexLimit: 13 },
+    ]
   },
   {
     id: 'hard-techno',
