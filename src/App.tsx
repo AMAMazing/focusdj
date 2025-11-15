@@ -76,6 +76,30 @@ const Modal = ({ isOpen, onClose, title, children }: ModalProps) => !isOpen ? nu
   </div>
 );
 
+interface ToggleSwitchProps {
+    checked: boolean;
+    onChange: () => void;
+    id?: string;
+}
+const ToggleSwitch = ({ checked, onChange, id }: ToggleSwitchProps) => (
+    <button
+        id={id}
+        role="switch"
+        aria-checked={checked}
+        onClick={onChange}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))] focus:ring-offset-2 focus:ring-offset-zinc-900 ${
+            checked ? 'bg-[hsl(var(--accent-hue),var(--accent-saturation),var(--accent-lightness))]' : 'bg-zinc-700'
+        }`}
+    >
+        <span
+            aria-hidden="true"
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+            }`}
+        />
+    </button>
+);
+
 interface Playlist {
     id: string;
     name: string;
@@ -470,7 +494,11 @@ const DailyGoalTracker = () => {
     const manualFullscreenZoom = 0.9;
 
     const store = useStore();
-    const { playlist, currentSession, isRunning, timeRemaining, focusGoal, pendingPlaylist, breakPlaylist, clockFormat, setClockFormat, settings, pauseTimer } = store;
+    const { 
+        playlist, currentSession, isRunning, timeRemaining, focusGoal, 
+        pendingPlaylist, breakPlaylist, clockFormat, setClockFormat, 
+        settings, pauseTimer, showGoalOnDashboard, toggleShowGoalOnDashboard 
+    } = store;
     const currentVideo = playlist.videos[playlist.currentIndex];
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -817,7 +845,7 @@ const mainContent = (
                             </div>
                         </div>
                     </div>
-                    <DailyGoalTracker />
+                    {showGoalOnDashboard && <DailyGoalTracker />}
                     {!isRunning && (
                         <div className="space-y-4 mt-6">
                             <div className="grid grid-cols-4 gap-3">
@@ -960,6 +988,12 @@ const mainContent = (
                 <div className="space-y-5">
                     <Stats />
                     <ContributionGraph />
+                    {!showGoalOnDashboard && (
+                        <div className="pt-2">
+                            <h3 className="text-lg font-bold mb-4">Today's Goal</h3>
+                            <DailyGoalTracker />
+                        </div>
+                    )}
                 </div>
             </Modal>
             <Modal isOpen={isBreakActivityModalOpen} onClose={() => setIsBreakActivityModalOpen(false)} title="Break Activities">
